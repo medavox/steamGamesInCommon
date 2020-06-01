@@ -21,11 +21,13 @@ kotlin {
     *  https://kotlinlang.org/docs/reference/building-mpp-with-gradle.html#setting-up-targets */
     js()  // JS target named 'js'
     val ktor_version = "1.3.2"
+    val serialization_version = "0.20.0"
     sourceSets {
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
                 implementation("io.ktor:ktor-client-core:$ktor_version")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$serialization_version")
             }
         }
         val commonTest by getting {
@@ -39,6 +41,8 @@ kotlin {
             dependencies {
                 implementation(kotlin("stdlib-jdk8"))
                 implementation("io.ktor:ktor-client-apache:$ktor_version")
+                implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version")
+
             }
         }
 
@@ -46,6 +50,8 @@ kotlin {
             dependencies {
                 implementation(kotlin("stdlib-jdk8"))
                 implementation("io.ktor:ktor-client-js:$ktor_version")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-js:$serialization_version")
+
             }
         }
     }
