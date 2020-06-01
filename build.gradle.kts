@@ -12,6 +12,7 @@ version = "1.0-SNAPSHOT"
 repositories {
     maven("https://dl.bintray.com/kotlin/kotlin-eap")
     mavenCentral()
+    jcenter()
 }
 
 kotlin {
