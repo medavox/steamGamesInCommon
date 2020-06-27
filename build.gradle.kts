@@ -34,10 +34,12 @@ kotlin {
     }  // JS target named 'js'
     val ktor_version = "1.3.2"
     val serialization_version = "0.20.0"
+    val coroutines_version = "1.3.7"
     sourceSets {
         val commonMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-common"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-common:$coroutines_version")
                 implementation("io.ktor:ktor-client-core:$ktor_version")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-common:$serialization_version")
             }
@@ -52,6 +54,8 @@ kotlin {
         val jvmMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-jdk8"))
+                implementation("com.github.ajalt:clikt:2.6.0")
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version")
                 implementation("io.ktor:ktor-client-apache:$ktor_version")
                 implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version")
             }
@@ -60,6 +64,7 @@ kotlin {
         val jsMain by getting {
             dependencies {
                 implementation(kotlin("stdlib-jdk8"))
+                implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-js:$coroutines_version")
                 implementation("io.ktor:ktor-client-js:$ktor_version")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-js:$serialization_version")
 
