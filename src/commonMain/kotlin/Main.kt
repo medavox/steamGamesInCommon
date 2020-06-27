@@ -1,4 +1,5 @@
 import io.ktor.client.HttpClient
+import io.ktor.client.features.HttpTimeout
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -65,6 +66,18 @@ suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope
         Pair(id, idPlayTimePairs)
     }
 
+    //work out which IDs are common to all given players
+    val withoutPlaytime: List<List<String>> = ownedGames.map {
+        it.value?.map { (appid, _) -> appid }
+    }.filterNotNull()
+    var commonToAll = withoutPlaytime[0].toSet()
+    for(i in 1 until withoutPlaytime.size) {
+        commonToAll = commonToAll.intersect(withoutPlaytime[i])
+    }
+
+    println("${commonToAll.size} games common to all: ")
+    commonToAll.forEach { println(it) }
+
     //create a Set<String> of unique app IDs, so we only have to lookup the name of each game once
     val gameIds:MutableSet<String> = mutableSetOf()
     ownedGames.values.filterNotNull().forEach{playerGameList ->
@@ -73,19 +86,32 @@ suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope
         }
     }
 
-    //convert each app ID to its game name:
+    //todo: defer id-to-name lookups until the last step, to reduce the amount of querying of steam's shitty REST routes
+
+    //convert each app ID to its game name
+    //=====================================
+
     //http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=218620
     val gameIdsToNames:MutableMap<String, String> = mutableMapOf()
 
     //http://store.steampowered.com/api/appdetails/?appids=
     val missingDataIds:MutableSet<String> = mutableSetOf()
 
+    //initialise cache from local file
+    //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
     println("${gameIds.size} game IDs to lookup")
-
+    /*
     gameIds.forEach { appid ->
+        val highTimeoutClient = HttpClient() {
+            install(HttpTimeout) {
+                // timeout config
+                requestTimeoutMillis = 30_000
+            }
+        }
+
         //println("http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid")
         val nameOfIdDeferred = async {
-            client.get<String>(
+            highTimeoutClient.get<String>(
                     "http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid"
             )
         }
@@ -122,6 +148,6 @@ suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope
             }
         }
     }
-    println("${missingDataIds.size} or ${(missingDataIds.size*1000) / (gameIds.size*1000) }‰ of name lookups failed")
+    println("${missingDataIds.size} or ${(missingDataIds.size*1000) / gameIds.size }‰ of name lookups failed")*/
     client.close()
 }
