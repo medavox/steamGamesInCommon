@@ -1,7 +1,9 @@
 import io.ktor.client.HttpClient
 import io.ktor.client.features.HttpTimeout
+import io.ktor.client.features.RedirectResponseException
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
@@ -100,21 +102,20 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
                 }
             }
             if (cachedNames.getProperty(appid) != null) {
-                println("found $appid in cache: ${cachedNames.getProperty(appid)}")
+                //println("found $appid in cache: ${cachedNames.getProperty(appid)}")
                 gameIdsToNames.put(appid, cachedNames.getProperty(appid))
             } else {
+                println("$appid not found in cache; trying steam web API...")
                 //println("http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid")
-                val nameOfIdDeferred = async {
+                val schemaDeferred = async {
                     highTimeoutClient.get<String>(
                             "http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid"
                     )
-                }
+                }.await()
                 //despite the name 'appids', the store API no longer supports multiple appids, for some unknown reason:
                 //https://www.reddit.com/r/Steam/comments/2kz2ay/steam_store_api_multiple_app_id_lists_no_longer/
-                val schemaDeferred = nameOfIdDeferred.await()
                 //println("rawdata length: ${schemaDeferred.length}")
                 val gameSchema: JsonObject? = json.parseJson(schemaDeferred).jsonObject["game"]?.jsonObject
-                var gameName: String? = null
                 if (gameSchema == null || !gameSchema.containsKey("gameName")) {
                     //problem: sometimes, the game data retrieved by this route is empty
                     //so we have to perform some workarounds, as described in the above reddit post
@@ -128,31 +129,38 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
                     //https://store.steampowered.com/app/<appid>
                     //find the human-readable name in the raw HTML of the store page:
                     // <div class="apphub_AppName">{human-readable name}</div>
-                    Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
+                    //Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
                     missingDataIds.add(appid)
                 } else {//the game data exists, so get the name from it
                     //ANOTHER PROBLEM: sometimes, the name is replaced with "ValveTestApp<AppId>"
                     //so for AppId 72850, it's ValveTestApp72850
                     val possibleName = gameSchema["gameName"].toString().trim { it == '"' }
                     if (!possibleName.startsWith("ValveTestApp") && !possibleName.contains("UntitledApp") && !possibleName.isBlank() && !possibleName.isEmpty()) {//it actually is fine
+                        println("found name for $appid: $schemaDeferred")
                         cachedNames.setProperty(appid, possibleName)
                         gameIdsToNames.put(appid, possibleName)
                         println("$appid: $possibleName")
                     } else {
                         //bollocks
+                        println("$appid was missing from web API :(")
                         missingDataIds.add(appid)
                     }
                 }
             }
         }
 
-        println("trying to scrape from HTML of store pages...")
-        missingDataIds.forEach { appid ->
+        if(missingDataIds.isNotEmpty()) println("trying to scrape missing entries from HTML of store pages...")
+        for(appid in missingDataIds) {
             val storePageHtml = async {
-                client.get<String>(
-                        "https://store.steampowered.com/app/$appid"
-                )
+                try {
+                    client.get<String>("https://store.steampowered.com/app/$appid")
+                }catch(rre: RedirectResponseException) {
+                    rre.printStackTrace()
+                    println("failed to get name of app $appid from store page scraper: ${rre::class.java}")
+                    ""
+                }
             }.await()
+            if(storePageHtml.isEmpty()) continue
 
             val nameInTitle = Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
             //find the human-readable name in the raw HTML of the store page:
