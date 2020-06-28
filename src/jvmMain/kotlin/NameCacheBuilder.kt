@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
  * saving having to download again on every instance
  * (speeds up the app, and reduces strain on our API Key's usage limits)*/
 fun buildNameCache(key: String, vararg players: String) {
+    val debug = false
     val NUM_THREADS = 8
     val client = OkHttpClient.Builder()/*.followRedirects(false)*/.callTimeout(30, TimeUnit.SECONDS).build()
     val json = Json(JsonConfiguration.Stable)
@@ -30,7 +31,7 @@ fun buildNameCache(key: String, vararg players: String) {
             vanityOrHash
         }else {
             val url = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$vanityOrHash"
-            println(url)
+            if (debug) println(url)
             val request:Request = Request.Builder()
                     .url(url)
                     .build()
@@ -59,7 +60,7 @@ fun buildNameCache(key: String, vararg players: String) {
     val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
     pp2.processMutableQueueWithWorkerPool(LinkedBlockingQueue(playerIDs), { playerId: String ->
         val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$playerId&format=json"
-        println(url)
+        if (debug) println(url)
         val request:Request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             val responseString = response.body?.string()
