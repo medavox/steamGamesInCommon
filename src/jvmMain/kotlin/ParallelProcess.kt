@@ -23,7 +23,7 @@ internal class ParallelProcess<In, Out> {
      * @param numberOfWorkerThreads the number of threads -- and the number of times to repeat -- running the workFunction
      * */
     @Throws(IllegalStateException::class)
-    fun repeatOnInput(input: In, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5) {
+    fun repeatOnInput(input: In, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
         outputInProgress = MutableList(numberOfWorkerThreads) {null}
@@ -41,7 +41,7 @@ internal class ParallelProcess<In, Out> {
      *
      * NOTE: Threads are expensive, so try not to use this with Arrays that have more than ~30 elements.*/
     @Throws(IllegalStateException::class)
-    fun oneWorkerPerElement(input: Array<out In>, workFunction: (input: In) -> Out) {
+    fun oneWorkerPerElement(input: Array<out In>, workFunction: (input: In) -> Out?) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
         outputInProgress = MutableList(input.size) {null}
@@ -58,13 +58,13 @@ internal class ParallelProcess<In, Out> {
      * @param inputQueue the queue of elements to be processed
      * @param workFunction the work to be done on each element in the queue
      * @param numberOfWorkerThreads number of parallel worker threads
-     * @param waitTime when the queue is empty, the time to wait between checks for new elements
+     * @param waitTime the time to wait between checks for new elements when the queue is empty
      * */
     @Throws(IllegalStateException::class)
-    fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
+    fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
-        outputInProgress = mutableListOf()//the output list is an as-yet unknown size,
+        outputInProgress = mutableListOf<Out?>()//the output list is an as-yet unknown size,
         //so just initialise it and let the workers add their elements.
         //let's hope Kotlin Lists are thread-safe!
         for(i in 1..numberOfWorkerThreads) {
@@ -98,7 +98,7 @@ internal class ParallelProcess<In, Out> {
 
     /**Get the resulting output from the worker threads.
      * This is a blocking method; it only returns once all worker threads have finished.*/
-    fun collectOutputWhenFinished(): List<Out> {
+    fun collectOutputWhenFinished(): List<Out?> {
         for(thread in workerThreads) {
             thread.join()
             //reset the workerThreads collection after we're done, to allow reuse of the same instance
@@ -106,6 +106,6 @@ internal class ParallelProcess<In, Out> {
         }
         isRunning = false
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
-        return outputInProgress.filterNotNull().toList()
+        return outputInProgress
     }
 }
