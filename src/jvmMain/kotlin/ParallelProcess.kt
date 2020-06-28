@@ -1,35 +1,47 @@
 import java.util.Queue
 
 /**Performs operations on input data concurrently.
- *
+ * Each instance of this class only supports running one operation at a time.
  * @author Adam Howard
  * @since 17/09/2018
  */
-internal class ParallelProcess<In, Out>(private val workFunction: (input: In) -> Out) {
+internal class ParallelProcess<In, Out> {
     var finishWhenQueueIsEmpty:Boolean = false
     var threadsKillswitch:Boolean = false
+
     private val workerThreads:MutableSet<Thread> = mutableSetOf()
-    lateinit var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
+    lateinit private var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
+    private var isRunning = false
     /**Run this instance's worker repeatedly concurrently with the same input.
      * @param numberOfWorkerThreads the number of threads --
      * and the number of times to repeat -- running the worker
      * @param input the input to run on*/
-    fun repeatOnInput(input: In, numberOfWorkerThreads: Int = 5) {
+    @Throws(IllegalStateException::class)
+    fun repeatOnInput(input: In, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5) {
+        if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
+                "Collect the data from this operation first, or use another instance.")
         outputInProgress = MutableList(numberOfWorkerThreads) {null}
         for(i in 0 until numberOfWorkerThreads) {
             val worker = Thread { outputInProgress.add(workFunction(input)) }
             workerThreads.add(worker)
+            isRunning = true
             worker.start()
         }
     }
 
     /**Process an array in parallel, with one worker thread per array element.
-     * @param input the array to iterate over concurrently.*/
-    fun oneWorkerPerElement(input: Array<out In>) {
+     * @param input the array to iterate over concurrently.
+     *
+     * NOTE: Threads are expensive, so try not to use this with Arrays that have more than ~30 elements.*/
+    @Throws(IllegalStateException::class)
+    fun oneWorkerPerElement(input: Array<out In>, workFunction: (input: In) -> Out) {
+        if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
+                "Collect the data from this operation first, or use another instance.")
         outputInProgress = MutableList(input.size) {null}
         for(i in input.indices) {
             val worker = Thread { outputInProgress.add(workFunction(input[i])) }
             workerThreads.add(worker)
+            isRunning = true
             worker.start()
         }
     }
@@ -38,7 +50,10 @@ internal class ParallelProcess<In, Out>(private val workFunction: (input: In) ->
      * In other words: performs work parallely, but not TOO parallely
      * @param inputQueue the queue of elements to be processed
      * @param numberOfWorkerThreads number of parallel worker threads. Defaults to 5*/
-    fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, numberOfWorkerThreads: Int = 5, waitTime:Long) {
+    @Throws(IllegalStateException::class)
+    fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
+        if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
+                "Collect the data from this operation first, or use another instance.")
         outputInProgress = mutableListOf()//the output list is an as-yet unknown size,
         //so just initialise it and let the workers add their elements.
         //let's hope Kotlin Lists are thread-safe!
@@ -66,6 +81,7 @@ internal class ParallelProcess<In, Out>(private val workFunction: (input: In) ->
                 }
             }
             workerThreads.add(worker)
+            isRunning = true
             worker.start()
         }
     }
@@ -76,6 +92,7 @@ internal class ParallelProcess<In, Out>(private val workFunction: (input: In) ->
         for(thread in workerThreads) {
             thread.join()
         }
+        isRunning = false
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
         return outputInProgress.filterNotNull().toList()
     }
