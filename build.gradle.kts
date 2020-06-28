@@ -53,6 +53,7 @@ kotlin {
 
         val jvmMain by getting {
             dependencies {
+                implementation("com.squareup.okhttp3:okhttp:4.7.2")
                 implementation(kotlin("stdlib-jdk8"))
                 implementation("com.github.ajalt:clikt:2.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version")
