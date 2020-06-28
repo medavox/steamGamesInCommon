@@ -20,29 +20,33 @@ import java.util.*
  * (speeds up the app, and reduces strain on our API Key's usage limits)*/
 suspend fun doit(key: String, vararg players: String) = coroutineScope {
     val client = HttpClient()
+    val json = Json(JsonConfiguration.Stable)
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
-    val playerSchemas = players.map {
-        async {
-            println("http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it")
-            client.get<String>(
-                    "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it"
-            )
+    val playerIDs:List<String> = players.map {
+        if(it.matches(Regex("\\d{17}"))) {//is already a SteamId
+            it
+        }else {
+            val response = async {
+                println("http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it")
+                client.get<String>(
+                        "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it"
+                )
+            }.await()
+            json.parseJson(response).jsonObject["response"]?.jsonObject?.get("steamid")?.toString()?.trim{ c -> c == '"'}
         }
-    }
+    }.filterNotNull()
 
     // Get the request contents without blocking threads, but wait until all requests are done.
     // Suspension point.
-    val json = Json(JsonConfiguration.Stable)
-    //.await() BOTH waits for the result to complete AND gets its result
-    val playerIDs: List<String> = playerSchemas.map {
-        //println(it.await())
-        json.parseJson(it.await()).jsonObject["response"]?.jsonObject
-    }.map { it?.get("steamid")?.toString()?.trim{ c -> c == '"'} }.filterNotNull()
 
-    players.forEachIndexed { i, s -> println("$s: ${playerIDs[i]}") }
+/*    val playerIDs: List<String> = playerSchemas.map {
+        json.parseJson(it).jsonObject["response"]?.jsonObject
+    }.map { it?.get("steamid")?.toString()?.trim{ c -> c == '"'} }.filterNotNull()*/
 
-    //get list of owned games for provided list of 64-bit steam IDs (comma-seperated) (profiles must be public):
+    //players.forEachIndexed { i, s -> println("$s: ${playerIDs[i]}") }
+
+    //get list of owned games for each 64-bit steam ID (comma-separated) (profiles must be public):
     //http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=76561197979296883&format=json
     //the Pair<String, String> is app id: play time forever
     val ownedGames:Map<String, List<Pair<String, String>>?> = playerIDs.associate { id: String ->
