@@ -3,16 +3,17 @@
  * @author Adam Howard
  * @since 17/09/2018
  */
-internal class ParallelProcess<In, Out>(private val workFunction:(input:In) -> Out) {
-    private val workerThreads:MutableSet<InternalWorker> = mutableSetOf()
-
+internal class ParallelProcess<In, Out>(private val workFunction: (input: In) -> Out) {
+    private val workerThreads:MutableSet<Thread> = mutableSetOf()
+    lateinit var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
     /**Run this instance's worker repeatedly concurrently with the same input.
-     * @param numberOfThreads the number of threads --
+     * @param numberOfWorkerThreads the number of threads --
      * and the number of times to repeat -- running the worker
      * @param input the input to run on*/
-    fun repeatOnInput(numberOfThreads:Int, input:In) {
-        for(i in 1..numberOfThreads) {
-            val worker = InternalWorker(input, workFunction)
+    fun repeatOnInput(input: In, numberOfWorkerThreads: Int = 5) {
+        outputInProgress = MutableList(numberOfWorkerThreads) {null}
+        for(i in 0 until numberOfWorkerThreads) {
+            val worker = Thread { outputInProgress.add(workFunction(input)) }
             workerThreads.add(worker)
             worker.start()
         }
@@ -20,9 +21,10 @@ internal class ParallelProcess<In, Out>(private val workFunction:(input:In) -> O
 
     /**Process an array in parallel, with one worker thread per array element.
      * @param input the array to iterate over concurrently.*/
-    fun oneWorkerPerElement(input:Array<out In>) {
+    fun oneWorkerPerElement(input: Array<out In>) {
+        outputInProgress = MutableList(input.size) {null}
         for(i in input.indices) {
-            val worker = InternalWorker(input[i], workFunction)
+            val worker = Thread { outputInProgress.add(workFunction(input[i])) }
             workerThreads.add(worker)
             worker.start()
         }
@@ -38,18 +40,5 @@ internal class ParallelProcess<In, Out>(private val workFunction:(input:In) -> O
         }
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
         return outputInProgress.filterNotNull().toList()
-    }
-
-    private inner class InternalWorker(val input: In, val workFunction:(input:In) -> Out): Thread() {
-        private var out: Out? = null
-
-        override fun run() {
-            super.run()
-            out = workFunction(input)
-        }
-
-        fun getOutput(): Out? {
-            return out
-        }
     }
 }
