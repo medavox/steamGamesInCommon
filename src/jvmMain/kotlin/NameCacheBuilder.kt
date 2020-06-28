@@ -121,8 +121,10 @@ fun buildNameCache(key: String, vararg players: String) {
         pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(gameIdsToLookup), { appid ->
             val url = "https://store.steampowered.com/app/$appid"
             val request:Request = Request.Builder().url(url)
-                    //thanks to https://stackoverflow.com/q/17643851
-                    .header("Range", "bytes=0-511")//only download the beginning of the storepage HTML
+                //don't compress the response, so we can just download the start of the document
+                .header("Accept-Encoding", "identity")
+                //thanks to https://stackoverflow.com/q/17643851
+                .header("Range", "bytes=0-511")//only download the beginning of the storepage HTML
                     //we just need the contents of the <title> tag, and we're not parsing it as valid html anyway
                     .build()
             client.newCall(request).execute().use { response: Response ->
