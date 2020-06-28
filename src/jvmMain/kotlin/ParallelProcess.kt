@@ -91,6 +91,8 @@ internal class ParallelProcess<In, Out> {
     fun collectOutputWhenFinished(): List<Out> {
         for(thread in workerThreads) {
             thread.join()
+            //reset the workerThreads collection after we're done, to allow reuse of the same instance
+            workerThreads.remove(thread)
         }
         isRunning = false
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
