@@ -8,6 +8,7 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.*
+import java.util.concurrent.LinkedBlockingQueue
 
 /**Downloads names for app IDs using several different HTTP routes,
  * to build a local game_name_cache.properties file that can be packaged with all versions of this app,
@@ -21,8 +22,8 @@ fun buildNameCache(key: String, vararg players: String) {
     //=====================================
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
-    val pp1 = ParallelProcess<String, String?>()
-    pp1.processMutableQueueWithWorkerPool(LinkedList(players.toList()), { vanityOrHash ->
+    val pp1 = ParallelProcess<String, String?>().finishWhenQueueIsEmpty()
+    pp1.processMutableQueueWithWorkerPool(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
         if(vanityOrHash.matches(Regex("\\d{17}"))) {//is already a SteamId
             vanityOrHash
         }else {
@@ -46,38 +47,36 @@ fun buildNameCache(key: String, vararg players: String) {
     //get list of owned games for each 64-bit steam ID (comma-separated) (profiles must be public):
     //http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=76561197979296883&format=json
     //Pair<appid:String, playtime:String>
-    val pp2 = ParallelProcess<String, Pair<String, List<Pair<String, String>>?>>()
-    pp2.processMutableQueueWithWorkerPool(LinkedList(playerIDs), { id: String ->
-        val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$id&format=json"
+    val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
+    pp2.processMutableQueueWithWorkerPool(LinkedBlockingQueue(playerIDs), { playerId: String ->
+        val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$playerId&format=json"
         println(url)
         val request:Request = Request.Builder().url(url).build()
         val response:String? = client.newCall(request).execute().body?.string()
         if(response == null) {
-            println("ERROR: got null response for game library request for ID $id")
+            println("ERROR: got null response for game library request for ID $playerId")
             //Pair(id, listOf<Pair<String, String>>())
             null
-        }else {
+        } else {
             val gamesJson: JsonObject? = json.parseJson(response).jsonObject["response"]?.jsonObject
             val gameIdList = gamesJson?.get("games")?.jsonArray
-            val idPlayTimePairs: List<Pair<String, String>>? = gameIdList?.mapNotNull {
+            val gameIds: List<String>? = gameIdList?.mapNotNull {
                 val asObj = it.jsonObject
-                val appid = asObj["appid"]?.primitive?.contentOrNull
-                val playtime = asObj["playtime_forever"]?.primitive?.contentOrNull
-                if (appid != null && playtime != null) Pair(appid, playtime) else null
+                asObj["appid"]?.primitive?.contentOrNull
             }
-            if (idPlayTimePairs?.isEmpty() != false) {
-                println("got zero games for steam ID $id; is the profile public?")
+            if (gameIds?.isEmpty() != false) {
+                println("got zero games for steam ID $playerId; is the profile public?")
             }
-            Pair(id, idPlayTimePairs)
+            Pair(playerId, gameIds)
         }
     }, NUM_THREADS)
 
-    val ownedGames:Map<String, List<Pair<String, String>>?> = pp2.collectOutputWhenFinished().toMap()
+    val ownedGames:Map<String, List<String>?> = pp2.collectOutputWhenFinished().filterNotNull().toMap()
 
     //create a Set<String> of unique app IDs, so we only have to lookup the name of each game once
     val gameIds:MutableSet<String> = mutableSetOf()
     ownedGames.values.filterNotNull().forEach{ playerGameList ->
-        playerGameList.forEach { (appid, _) ->
+        playerGameList.forEach { appid ->
             gameIds.add(appid)
         }
     }
@@ -107,7 +106,7 @@ fun buildNameCache(key: String, vararg players: String) {
         val gameIdsToLookup = gameIds.filter { appid ->
             cachedNames.getProperty(appid) == null
         }
-        pp1.processMutableQueueWithWorkerPool(LinkedList(gameIdsToLookup), { appid ->
+        pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(gameIdsToLookup), { appid ->
             val url = "https://store.steampowered.com/app/$appid"
             val request:Request = Request.Builder().url(url)
                     //thanks to https://stackoverflow.com/q/17643851
@@ -115,8 +114,7 @@ fun buildNameCache(key: String, vararg players: String) {
                     //we just need the contents of the <title> tag, and we're not parsing it as valid html anyway
                     .build()
             val response:String? = client.newCall(request).execute().body?.string()
-            println("response:")
-            println("$response")
+            println("response length :${response?.length}")
             if(response.isNullOrEmpty()) {
                 null//exit early with a null result
             }else {

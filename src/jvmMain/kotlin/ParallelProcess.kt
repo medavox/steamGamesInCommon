@@ -1,4 +1,5 @@
 import java.util.Queue
+import java.util.concurrent.BlockingQueue
 
 /**Performs operations on input data concurrently.
  * Each instance of this class only supports running one operation at a time.
@@ -6,10 +7,15 @@ import java.util.Queue
  * @since 17/09/2018
  */
 internal class ParallelProcess<In, Out> {
+    fun finishWhenQueueIsEmpty(finish:Boolean = true):ParallelProcess<In, Out> {
+        finishWhenQueueIsEmpty = finish
+        return this
+    }
+    //private var workFunction: (input: In) -> Out?
     /**In Queue processing,
      * signal the worker threads to finish gracefully once the queue is empty,
      * instead of waiting for new elements to be added.*/
-    var finishWhenQueueIsEmpty:Boolean = false
+    private var finishWhenQueueIsEmpty:Boolean = false
     /**In queue processing, stop all worker threads immediately after finishing their current element,
      * regardless of the state of the queue.*/
     var threadsKillswitch:Boolean = false
@@ -61,7 +67,7 @@ internal class ParallelProcess<In, Out> {
      * @param waitTime the time to wait between checks for new elements when the queue is empty
      * */
     @Throws(IllegalStateException::class)
-    fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
+    fun processMutableQueueWithWorkerPool(inputQueue: BlockingQueue<out In>, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
         outputInProgress = mutableListOf<Out?>()//the output list is an as-yet unknown size,
@@ -102,10 +108,16 @@ internal class ParallelProcess<In, Out> {
         for(thread in workerThreads) {
             thread.join()
             //reset the workerThreads collection after we're done, to allow reuse of the same instance
-            workerThreads.remove(thread)
+            //workerThreads.remove(thread)
         }
         isRunning = false
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
         return outputInProgress
+    }
+
+    fun reset():ParallelProcess<In, Out> {
+        workerThreads.clear()
+        threadsKillswitch = false
+        return this
     }
 }
