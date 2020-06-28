@@ -115,6 +115,7 @@ fun buildNameCache(key: String, vararg players: String) {
     //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
     println("${gameIds.size} game IDs to lookup")
     try {
+        val failedScrapes = mutableSetOf<String>()
         //filter out any game IDs that we already have in the cache
         val gameIdsToLookup = gameIds.filter { appid ->
             cachedNames.getProperty(appid) == null
@@ -123,9 +124,9 @@ fun buildNameCache(key: String, vararg players: String) {
             val url = "https://store.steampowered.com/app/$appid"
             val request:Request = Request.Builder().url(url)
                 //don't compress the response, so we can just download the start of the document
-                .header("Accept-Encoding", "identity")
+                //.header("Accept-Encoding", "identity")
                 //thanks to https://stackoverflow.com/q/17643851
-                .header("Range", "bytes=0-511")//only download the beginning of the storepage HTML
+                //.header("Range", "bytes=0-511")//only download the beginning of the storepage HTML
                     //we just need the contents of the <title> tag, and we're not parsing it as valid html anyway
                     .build()
             client.newCall(request).execute().use { response: Response ->
@@ -139,30 +140,77 @@ fun buildNameCache(key: String, vararg players: String) {
                     //some games have multiple APP IDs, for the linux/windows/mac versions, if KF1 is a good example
                     null//exit early with a null result
                 } else {
-                    println("response :$response")
-                    println("prior response: ${response.priorResponse}")
+//                    println("response :$response")
+//                    println("prior response: ${response.priorResponse}")
                     //println("response length :${responseString?.length}")
                     val nameInTitle = Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
                     //find the human-readable name in the raw HTML of the store page:
                     // <div class="apphub_AppName">{human-readable name}</div>
                     val nameFromTitleResult: MatchResult? = nameInTitle.find(responseString)
                     val possibleName: String? = nameFromTitleResult?.groupValues?.get(1)
-                    possibleName?.let {
+                    if(possibleName != null) {
                         println("name found on store page: $possibleName")
                         cachedNames.setProperty(appid, possibleName)
                         gameIdsToNames.put(appid, possibleName)
+                    } else {
+                        //print("failed to get a name for appid $appid. ")
+                        failedScrapes.add(appid)
+                        //println("first 400 chars of response:"+responseString.substring(0, 400))
+                        //println("request URL: "+response.request.url)
+/*                        println("response chain: ")
+                        var currentPrior:Response? = response
+                        while(currentPrior != null) {
+                            println("\t"+currentPrior)
+                            currentPrior = currentPrior.priorResponse
+                        }*/
                     }
                     possibleName
                 }
             }
         }, NUM_THREADS)
-
-        val results = pp1.collectOutputWhenFinished()//this output collection isn't the most important data storage;
+        pp1.collectOutputWhenFinished()//this output collection isn't the most important data storage;
         // the real work is in the Properties file, which now needs writing to disk
+
+        //STEP 4: Retry failed scrapes with the Web API
+        println("retrying ${failedScrapes.size} failed store-page scrapes with the Steam Web API...")
+        pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(failedScrapes), { appid:String ->
+            //despite the name 'appids', the store API no longer supports multiple appids, for some unknown reason:
+            //https://www.reddit.com/r/Steam/comments/2kz2ay/steam_store_api_multiple_app_id_lists_no_longer/
+            val url = "http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid"
+            if (debug) println(url)
+            val request:Request = Request.Builder().url(url)
+                .build()
+            client.newCall(request).execute().use { response: Response ->
+                val responseString: String? = response.body?.string()
+
+                var possibleName:String? = null
+                val gameSchema: JsonObject? = responseString?.let { json.parseJson(it).jsonObject }?.get("game")?.jsonObject
+                if (gameSchema == null || !gameSchema.containsKey("gameName")) {
+                    //http://store.steampowered.com/api/appdetails/?appids=<only one appid>
+                    //the above query blocks you with status 429 if you hit it roughly more than 200 times in 5 minutes, apparently
+                } else {//the game data exists, so get the name from it
+                    //ANOTHER PROBLEM: sometimes, the name is replaced with "ValveTestApp<AppId>"
+                    //so for AppId 72850, it's ValveTestApp72850
+                    possibleName = gameSchema["gameName"].toString().trim { it == '"' }
+                    if (!possibleName.startsWith("ValveTestApp") && !possibleName.contains("UntitledApp") && !possibleName.isBlank() && !possibleName.isEmpty()) {//it actually is fine
+                        println("found name for $appid: $possibleName")
+                        cachedNames.setProperty(appid, possibleName)
+                        gameIdsToNames.put(appid, possibleName)
+                    } else {
+                        //bollocks
+                        println("$appid was missing from web API")
+                    }
+                }
+                possibleName
+            }
+        }, NUM_THREADS)
+
+        val results = pp1.collectOutputWhenFinished()
         val failures = results.count { it == null }
         println("$failures or ${(failures*1000) / gameIds.size }‰ of name lookups failed")
-    }finally {
+    } finally {
         //write out any newly retrieved game names to the .properties cachefile
+        println("writing new entries to file...")
         val fos = FileOutputStream(cacheFile)
         cachedNames.store(fos, "")
         fos.close()
