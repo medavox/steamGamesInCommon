@@ -18,7 +18,7 @@ import java.util.*
  * to build a local game_name_cache.properties file that can be packaged with all versions of this app,
  * saving having to download again on every instance
  * (speeds up the app, and reduces strain on our API Key's usage limits)*/
-suspend fun doit(key: String, vararg players: String) = coroutineScope {
+suspend fun buildNameCache(key: String, vararg players: String) = coroutineScope {
     val client = HttpClient()
     val json = Json(JsonConfiguration.Stable)
     // request all player IDs asynchronously in parallel.

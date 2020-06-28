@@ -32,7 +32,7 @@ class ArgParser: CliktCommand(name="pytokot") {
 fun main(args:Array<String>) = runBlocking<Unit> {
     //ArgParser().main(args)
     val names = Arrays.copyOfRange(args, 1, args.size)
-    doit(args[0], *names)
+    buildNameCache(args[0], *names)
     //parallelRequests(args[0], *names)
 /*    if(args.size >= 2) {
         entryPoint(args[0], *(args.slice(1 until args.size).toTypedArray()))
