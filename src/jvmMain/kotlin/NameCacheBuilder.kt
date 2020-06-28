@@ -73,7 +73,7 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
     //create a Set<String> of unique app IDs, so we only have to lookup the name of each game once
     val gameIds:MutableSet<String> = mutableSetOf()
     ownedGames.values.filterNotNull().forEach{ playerGameList ->
-        playerGameList.forEach { (appid, playtime) ->
+        playerGameList.forEach { (appid, _) ->
             gameIds.add(appid)
         }
     }
@@ -101,62 +101,11 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
     //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
     println("${gameIds.size} game IDs to lookup")
     try {
-        gameIds.forEach { appid ->
-            val highTimeoutClient = HttpClient() {
-                install(HttpTimeout) {
-                    // timeout config
-                    requestTimeoutMillis = 30_000
-                }
-            }
+        if(missingDataIds.isNotEmpty()) println("scraping ${missingDataIds.size} missing entries from HTML of store pages...")
+        for(appid in gameIds) {
             if (cachedNames.getProperty(appid) != null) {
-                //println("found $appid in cache: ${cachedNames.getProperty(appid)}")
-                gameIdsToNames.put(appid, cachedNames.getProperty(appid))
-            } else {
-                //println("$appid not found in cache; trying steam web API...")
-                //println("http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid")
-                val schemaDeferred = async {
-                    highTimeoutClient.get<String>(
-                            "http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid"
-                    )
-                }.await()
-                //despite the name 'appids', the store API no longer supports multiple appids, for some unknown reason:
-                //https://www.reddit.com/r/Steam/comments/2kz2ay/steam_store_api_multiple_app_id_lists_no_longer/
-                //println("rawdata length: ${schemaDeferred.length}")
-                val gameSchema: JsonObject? = json.parseJson(schemaDeferred).jsonObject["game"]?.jsonObject
-                if (gameSchema == null || !gameSchema.containsKey("gameName")) {
-                    //problem: sometimes, the game data retrieved by this route is empty
-                    //so we have to perform some workarounds, as described in the above reddit post
-
-
-                    //1. check the local cachefile (CSV) for game name
-                    //if that fails, add it to the backupApi query list
-                    //http://store.steampowered.com/api/appdetails/?appids=<only one appid>
-                    //the above query blocks you with status 429 if you hit it roughly more than 200 times in 5 minutes, apparently
-                    //option C:
-                    //https://store.steampowered.com/app/<appid>
-                    //find the human-readable name in the raw HTML of the store page:
-                    // <div class="apphub_AppName">{human-readable name}</div>
-                    //Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
-                    missingDataIds.add(appid)
-                } else {//the game data exists, so get the name from it
-                    //ANOTHER PROBLEM: sometimes, the name is replaced with "ValveTestApp<AppId>"
-                    //so for AppId 72850, it's ValveTestApp72850
-                    val possibleName = gameSchema["gameName"].toString().trim { it == '"' }
-                    if (!possibleName.startsWith("ValveTestApp") && !possibleName.contains("UntitledApp") && !possibleName.isBlank() && !possibleName.isEmpty()) {//it actually is fine
-                        println("found name for $appid: $possibleName")
-                        cachedNames.setProperty(appid, possibleName)
-                        gameIdsToNames.put(appid, possibleName)
-                    } else {
-                        //bollocks
-                        println("$appid was missing from web API")
-                        missingDataIds.add(appid)
-                    }
-                }
+                continue
             }
-        }
-
-        if(missingDataIds.isNotEmpty()) println("trying to scrape missing entries from HTML of store pages...")
-        for(appid in missingDataIds) {
             val storePageHtml = async {
                 try {
                     client.get<String>("https://store.steampowered.com/app/$appid")
@@ -177,6 +126,7 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
                 println("name found on store page: $possibleName")
                 cachedNames.setProperty(appid, possibleName)
                 gameIdsToNames.put(appid, possibleName)
+                missingDataIds.remove(appid)
             }
         }
     }finally {
