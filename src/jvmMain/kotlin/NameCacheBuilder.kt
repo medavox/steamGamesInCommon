@@ -51,6 +51,7 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
     //the Pair<String, String> is app id: play time forever
     val ownedGames:Map<String, List<Pair<String, String>>?> = playerIDs.associate { id: String ->
         val games = async {
+            println("http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$id&format=json")
             client.get<String>(
                     "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$id&format=json"
             )
@@ -63,7 +64,9 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
             val playtime = asObj["playtime_forever"]?.primitive?.contentOrNull
             if(appid != null && playtime != null) Pair(appid, playtime) else null
         }?.filterNotNull()
-        //println(gameIdList)
+        if(idPlayTimePairs?.isEmpty() != false) {
+            println("got zero games for steam ID $id; is the profile public?")
+        }
         Pair(id, idPlayTimePairs)
     }
 
@@ -109,7 +112,7 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
                 //println("found $appid in cache: ${cachedNames.getProperty(appid)}")
                 gameIdsToNames.put(appid, cachedNames.getProperty(appid))
             } else {
-                println("$appid not found in cache; trying steam web API...")
+                //println("$appid not found in cache; trying steam web API...")
                 //println("http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid")
                 val schemaDeferred = async {
                     highTimeoutClient.get<String>(
@@ -140,13 +143,12 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
                     //so for AppId 72850, it's ValveTestApp72850
                     val possibleName = gameSchema["gameName"].toString().trim { it == '"' }
                     if (!possibleName.startsWith("ValveTestApp") && !possibleName.contains("UntitledApp") && !possibleName.isBlank() && !possibleName.isEmpty()) {//it actually is fine
-                        println("found name for $appid: $schemaDeferred")
+                        println("found name for $appid: $possibleName")
                         cachedNames.setProperty(appid, possibleName)
                         gameIdsToNames.put(appid, possibleName)
-                        println("$appid: $possibleName")
                     } else {
                         //bollocks
-                        println("$appid was missing from web API :(")
+                        println("$appid was missing from web API")
                         missingDataIds.add(appid)
                     }
                 }
@@ -184,6 +186,7 @@ suspend fun doit(key: String, vararg players: String) = coroutineScope {
         fos.close()
     }
 
-    println("${missingDataIds.size} or ${(missingDataIds.size*1000) / gameIds.size }‰ of name lookups failed")
+    println("${missingDataIds.size} or ${(missingDataIds.size*1000) / gameIds.size }‰ of name lookups failed:")
+    println(missingDataIds)
     client.close()
 }
