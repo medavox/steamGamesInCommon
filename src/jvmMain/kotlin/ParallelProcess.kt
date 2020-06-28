@@ -82,7 +82,7 @@ internal class ParallelProcess<In, Out> {
                         outputInProgress.add(workFunction(next))
                         if (finishWhenQueueIsEmpty) { //while we're still working when we've been told to stop when the queue is empty,
                             // indicate the number of items left
-                            println("items left in queue:" + inputQueue.size)
+                            //println("items left in queue:" + inputQueue.size)
                         }
                     } else if (finishWhenQueueIsEmpty) { //this thread's been told to exit when the download queue is empty
                         break

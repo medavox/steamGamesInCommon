@@ -3,12 +3,14 @@ import kotlinx.serialization.json.JsonConfiguration
 import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.*
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**Downloads names for app IDs using several different HTTP routes,
  * to build a local game_name_cache.properties file that can be packaged with all versions of this app,
@@ -16,7 +18,7 @@ import java.util.concurrent.LinkedBlockingQueue
  * (speeds up the app, and reduces strain on our API Key's usage limits)*/
 fun buildNameCache(key: String, vararg players: String) {
     val NUM_THREADS = 8
-    val client = OkHttpClient()
+    val client = OkHttpClient.Builder()/*.followRedirects(false)*/.callTimeout(30, TimeUnit.SECONDS).build()
     val json = Json(JsonConfiguration.Stable)
     //STEP 1
     //=====================================
@@ -32,11 +34,15 @@ fun buildNameCache(key: String, vararg players: String) {
             val request:Request = Request.Builder()
                     .url(url)
                     .build()
-            val response:String? = client.newCall(request).execute().body?.string()
-            if(response == null) println("ERROR: got null response for ID $vanityOrHash")
-            response?.let{
-                json.parseJson(response).jsonObject["response"]?.
-                    jsonObject?.get("steamid")?.toString()?.trim{ c -> c == '"'}
+
+            client.newCall(request).execute().use { response ->
+                val responseString = response.body?.string()
+
+                if (responseString == null) println("ERROR: got null response for ID $vanityOrHash")
+                responseString?.let {
+                    json.parseJson(responseString).jsonObject["response"]?.jsonObject?.get("steamid")?.toString()
+                        ?.trim { c -> c == '"' }
+                }
             }
         }
     }, NUM_THREADS)
@@ -47,27 +53,33 @@ fun buildNameCache(key: String, vararg players: String) {
     //get list of owned games for each 64-bit steam ID (comma-separated) (profiles must be public):
     //http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=76561197979296883&format=json
     //Pair<appid:String, playtime:String>
+    println("\n-----------------------------------------------------------------------")
+    println("getting list of owned games for each steam ID (profiles must be public):")
+    println("-----------------------------------------------------------------------\n")
     val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
     pp2.processMutableQueueWithWorkerPool(LinkedBlockingQueue(playerIDs), { playerId: String ->
         val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$playerId&format=json"
         println(url)
         val request:Request = Request.Builder().url(url).build()
-        val response:String? = client.newCall(request).execute().body?.string()
-        if(response == null) {
-            println("ERROR: got null response for game library request for ID $playerId")
-            //Pair(id, listOf<Pair<String, String>>())
-            null
-        } else {
-            val gamesJson: JsonObject? = json.parseJson(response).jsonObject["response"]?.jsonObject
-            val gameIdList = gamesJson?.get("games")?.jsonArray
-            val gameIds: List<String>? = gameIdList?.mapNotNull {
-                val asObj = it.jsonObject
-                asObj["appid"]?.primitive?.contentOrNull
+        client.newCall(request).execute().use { response ->
+            val responseString = response.body?.string()
+
+            if (responseString == null) {
+                println("ERROR: got null response for game library request for ID $playerId")
+                //Pair(id, listOf<Pair<String, String>>())
+                null
+            } else {
+                val gamesJson: JsonObject? = json.parseJson(responseString).jsonObject["response"]?.jsonObject
+                val gameIdList = gamesJson?.get("games")?.jsonArray
+                val gameIds: List<String>? = gameIdList?.mapNotNull {
+                    val asObj = it.jsonObject
+                    asObj["appid"]?.primitive?.contentOrNull
+                }
+                if (gameIds?.isEmpty() != false) {
+                    println("got zero games for steam ID $playerId; is the profile public?")
+                }
+                Pair(playerId, gameIds)
             }
-            if (gameIds?.isEmpty() != false) {
-                println("got zero games for steam ID $playerId; is the profile public?")
-            }
-            Pair(playerId, gameIds)
         }
     }, NUM_THREADS)
 
@@ -113,22 +125,32 @@ fun buildNameCache(key: String, vararg players: String) {
                     .header("Range", "bytes=0-511")//only download the beginning of the storepage HTML
                     //we just need the contents of the <title> tag, and we're not parsing it as valid html anyway
                     .build()
-            val response:String? = client.newCall(request).execute().body?.string()
-            println("response length :${response?.length}")
-            if(response.isNullOrEmpty()) {
-                null//exit early with a null result
-            }else {
-                val nameInTitle = Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
-                //find the human-readable name in the raw HTML of the store page:
-                // <div class="apphub_AppName">{human-readable name}</div>
-                val nameFromTitleResult: MatchResult? = nameInTitle.find(response)
-                val possibleName: String? = nameFromTitleResult?.groupValues?.get(1)
-                possibleName?.let {
-                    println("name found on store page: $possibleName")
-                    cachedNames.setProperty(appid, possibleName)
-                    gameIdsToNames.put(appid, possibleName)
+            client.newCall(request).execute().use { response: Response ->
+
+
+                val responseString: String? = response.body?.string()
+                //val response:String? = Jsoup.connect(url).timeout(30_000).get().toString()
+                if (/*response.code == 302 ||*/ responseString.isNullOrEmpty()) {
+                    //todo: some redirects aren't just dumping us out on the main page:
+
+                    //some games have multiple APP IDs, for the linux/windows/mac versions, if KF1 is a good example
+                    null//exit early with a null result
+                } else {
+                    println("response :$response")
+                    println("prior response: ${response.priorResponse}")
+                    //println("response length :${responseString?.length}")
+                    val nameInTitle = Regex("<title>(?:Save \\d{1,3}% on )?(.+) on Steam</title>")
+                    //find the human-readable name in the raw HTML of the store page:
+                    // <div class="apphub_AppName">{human-readable name}</div>
+                    val nameFromTitleResult: MatchResult? = nameInTitle.find(responseString)
+                    val possibleName: String? = nameFromTitleResult?.groupValues?.get(1)
+                    possibleName?.let {
+                        println("name found on store page: $possibleName")
+                        cachedNames.setProperty(appid, possibleName)
+                        gameIdsToNames.put(appid, possibleName)
+                    }
+                    possibleName
                 }
-                possibleName
             }
         }, NUM_THREADS)
 
