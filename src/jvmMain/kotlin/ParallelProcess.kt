@@ -6,16 +6,22 @@ import java.util.Queue
  * @since 17/09/2018
  */
 internal class ParallelProcess<In, Out> {
+    /**In Queue processing,
+     * signal the worker threads to finish gracefully once the queue is empty,
+     * instead of waiting for new elements to be added.*/
     var finishWhenQueueIsEmpty:Boolean = false
+    /**In queue processing, stop all worker threads immediately after finishing their current element,
+     * regardless of the state of the queue.*/
     var threadsKillswitch:Boolean = false
 
     private val workerThreads:MutableSet<Thread> = mutableSetOf()
     lateinit private var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
     private var isRunning = false
     /**Run this instance's worker repeatedly concurrently with the same input.
-     * @param numberOfWorkerThreads the number of threads --
-     * and the number of times to repeat -- running the worker
-     * @param input the input to run on*/
+     * @param input the input to run on
+     * @param workFunction the work to be done on the input by each worker thread
+     * @param numberOfWorkerThreads the number of threads -- and the number of times to repeat -- running the workFunction
+     * */
     @Throws(IllegalStateException::class)
     fun repeatOnInput(input: In, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
@@ -31,6 +37,7 @@ internal class ParallelProcess<In, Out> {
 
     /**Process an array in parallel, with one worker thread per array element.
      * @param input the array to iterate over concurrently.
+     * @param workFunction the work to be done on each element in the array
      *
      * NOTE: Threads are expensive, so try not to use this with Arrays that have more than ~30 elements.*/
     @Throws(IllegalStateException::class)
@@ -49,7 +56,10 @@ internal class ParallelProcess<In, Out> {
      * The number of worker threads is usually far fewer than the number of elements in the queue at any one time.
      * In other words: performs work parallely, but not TOO parallely
      * @param inputQueue the queue of elements to be processed
-     * @param numberOfWorkerThreads number of parallel worker threads. Defaults to 5*/
+     * @param workFunction the work to be done on each element in the queue
+     * @param numberOfWorkerThreads number of parallel worker threads
+     * @param waitTime when the queue is empty, the time to wait between checks for new elements
+     * */
     @Throws(IllegalStateException::class)
     fun processMutableQueueWithWorkerPool(inputQueue: Queue<out In>, workFunction: (input: In) -> Out, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
