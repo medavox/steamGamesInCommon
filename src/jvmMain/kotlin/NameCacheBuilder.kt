@@ -29,7 +29,7 @@ fun buildNameCache(key: String, vararg players: String) {
     pp1.processMutableQueueWithWorkerPool(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
         if(vanityOrHash.matches(Regex("\\d{17}"))) {//is already a SteamId
             vanityOrHash
-        }else {
+        } else {
             val url = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$vanityOrHash"
             if (debug) println(url)
             val request:Request = Request.Builder()
@@ -102,16 +102,19 @@ fun buildNameCache(key: String, vararg players: String) {
     val gameIdsToNames:MutableMap<String, String> = mutableMapOf()
 
     //http://store.steampowered.com/api/appdetails/?appids=
+    //initialise cache from local file
     val cacheFile = File("game_name_cache.properties")
-    if(!cacheFile.exists()) cacheFile.createNewFile()
     val cachedNames = Properties()
-    val inputStream: InputStream = FileInputStream(cacheFile)
-    cachedNames.load(inputStream)
-    inputStream.close()
+    if(!cacheFile.exists()) {
+        cacheFile.createNewFile()
+    }else {
+        val inputStream: InputStream = FileInputStream(cacheFile)
+        cachedNames.load(inputStream)
+        inputStream.close()
+    }
 
     println("found ${cachedNames.size} game name mappings in local .properties file")
 
-    //initialise cache from local file
     //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
     println("${gameIds.size} game IDs to lookup")
     try {
@@ -215,6 +218,4 @@ fun buildNameCache(key: String, vararg players: String) {
         cachedNames.store(fos, "")
         fos.close()
     }
-
-
 }
