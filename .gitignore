@@ -1,3 +1,4 @@
 src/jvmMain/kotlin/GameNameCacheBuilderMain.kt
 .idea/
 .gradle/
+build/
