@@ -19,7 +19,7 @@ import kotlinx.serialization.json.JsonObject
  *   3) a minimum percentage of the group has played before
  *   4) the average playtime is above a certain amount (total group playtime divided by number of players)
  *   5) at least one player has played before*/
-suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope {
+suspend fun steamGamesInCommon(key:String, vararg players:String) = coroutineScope {
     val client = HttpClient()
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
@@ -75,18 +75,13 @@ suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope
         commonToAll = commonToAll.intersect(withoutPlaytime[i])
     }
 
-    println("${commonToAll.size} games common to all: ")
-    commonToAll.forEach { println(it) }
+    println("${commonToAll.size} games common to all")
+    //lookup names in cache
+    val nameMappings = commonToAll.associateWith { appid -> gameNameCache[appid.toInt()] }
+    nameMappings.forEach { if(it.value == null ) println(it.key) else println(it.value) }
 
-    //create a Set<String> of unique app IDs, so we only have to lookup the name of each game once
-    val gameIds:MutableSet<String> = mutableSetOf()
-    ownedGames.values.filterNotNull().forEach{playerGameList ->
-        playerGameList.forEach {(appid, playtime) ->
-            gameIds.add(appid)
-        }
-    }
-
-    //todo: defer id-to-name lookups until the last step, to reduce the amount of querying of steam's shitty REST routes
+    //todo: defer id-to-name lookups until the last step,
+    // to reduce the amount of querying we have to do on Steam's shitty routes
 
     //convert each app ID to its game name
     //=====================================
@@ -99,7 +94,7 @@ suspend fun parallelRequests(key:String, vararg players:String) = coroutineScope
 
     //initialise cache from local file
     //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
-    println("${gameIds.size} game IDs to lookup")
+    //println("${gameIds.size} game IDs to lookup")
     /*
     gameIds.forEach { appid ->
         val highTimeoutClient = HttpClient() {
