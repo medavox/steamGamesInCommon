@@ -55,7 +55,6 @@ kotlin {
             dependencies {
                 implementation("com.squareup.okhttp3:okhttp:4.7.2")
                 implementation(kotlin("stdlib-jdk8"))
-                implementation("com.github.ajalt:clikt:2.6.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version")
                 implementation("io.ktor:ktor-client-apache:$ktor_version")
                 implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version")
