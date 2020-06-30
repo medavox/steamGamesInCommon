@@ -1,5 +1,3 @@
-import io.ktor.http.escapeIfNeeded
-import org.apache.commons.text.StringEscapeUtils
 import org.jsoup.parser.Parser
 import java.io.File
 import java.io.FileInputStream
@@ -31,7 +29,7 @@ object PropertiesToKotlinConverter {
             return
         }
         output.createNewFile()
-        output.writeText("val gameNameCache:Map<Int, String> = mapOf(\n")
+        output.writeText("val gameNameCache:Map<Int, String> = mapOf(\n")//use write on the first call, to overwrite the existing file
         var lastLine = ""
         for(entry in cache.entries.sortedBy { it.key as String }) {
             output.appendText(lastLine+if(lastLine.isEmpty()) "" else ",\n")

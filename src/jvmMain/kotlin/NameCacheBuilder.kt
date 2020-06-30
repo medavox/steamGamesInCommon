@@ -96,32 +96,22 @@ fun buildNameCache(key: String, vararg players: String) {
 
     //STEP 3
     //=====================================
-    //convert each app ID to its game name
-
+    //get game name for each app ID
     //http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=218620
     val gameIdsToNames:MutableMap<String, String> = mutableMapOf()
 
     //http://store.steampowered.com/api/appdetails/?appids=
-    //initialise cache from local file
-    val cacheFile = File("game_name_cache.properties")
-    val cachedNames = Properties()
-    if(!cacheFile.exists()) {
-        cacheFile.createNewFile()
-    }else {
-        val inputStream: InputStream = FileInputStream(cacheFile)
-        cachedNames.load(inputStream)
-        inputStream.close()
-    }
 
-    println("found ${cachedNames.size} game name mappings in local .properties file")
 
+    println("${gameNameCache.size} game name mappings in local map")
+    val cachedNames:MutableMap<Int, String> = gameNameCache.toMutableMap()
     //val cachedIdNameEntries:Map<String, String> =//todo: figure out how to load local resource files on common?
     println("${gameIds.size} game IDs to lookup")
     try {
         val failedScrapes = mutableSetOf<String>()
         //filter out any game IDs that we already have in the cache
         val gameIdsToLookup = gameIds.filter { appid ->
-            cachedNames.getProperty(appid) == null
+            cachedNames[appid.toInt()] == null
         }
         pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(gameIdsToLookup), { appid ->
             val url = "https://store.steampowered.com/app/$appid"
@@ -153,8 +143,8 @@ fun buildNameCache(key: String, vararg players: String) {
                     val possibleName: String? = nameFromTitleResult?.groupValues?.get(1)
                     if(possibleName != null) {
                         println("name found on store page: $possibleName")
-                        cachedNames.setProperty(appid, possibleName)
-                        gameIdsToNames.put(appid, possibleName)
+                        cachedNames[appid.toInt()] = possibleName
+                        gameIdsToNames[appid] = possibleName
                     } else {
                         //print("failed to get a name for appid $appid. ")
                         failedScrapes.add(appid)
@@ -197,8 +187,8 @@ fun buildNameCache(key: String, vararg players: String) {
                     possibleName = gameSchema["gameName"].toString().trim { it == '"' }
                     if (!possibleName.startsWith("ValveTestApp") && !possibleName.contains("UntitledApp") && !possibleName.isBlank() && !possibleName.isEmpty()) {//it actually is fine
                         println("found name for $appid: $possibleName")
-                        cachedNames.setProperty(appid, possibleName)
-                        gameIdsToNames.put(appid, possibleName)
+                        cachedNames[appid.toInt()] = possibleName
+                        gameIdsToNames[appid] = possibleName
                     } else {
                         //bollocks
                         println("$appid was missing from web API")
