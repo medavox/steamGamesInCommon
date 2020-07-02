@@ -30,7 +30,14 @@ kotlin {
         }
     }
     js{
-        browser()
+        browser {
+            dceTask {
+                keep("ktor-ktor-io.\$\$importsForInline\$\$.ktor-ktor-io.io.ktor.utils.io")
+            }
+            distribution {
+                directory = File("$projectDir/output/")
+            }
+        }
     }  // JS target named 'js'
     val ktor_version = "1.3.2"
     val serialization_version = "0.20.0"
@@ -67,7 +74,11 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-js:$coroutines_version")
                 implementation("io.ktor:ktor-client-js:$ktor_version")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-runtime-js:$serialization_version")
-
+                api(npm("text-encoding"))
+                api(npm("bufferutil"))
+                api(npm("utf-8-validate"))
+                api(npm("abort-controller"))
+                api(npm("fs"))
             }
         }
     }
