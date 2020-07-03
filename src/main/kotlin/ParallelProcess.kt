@@ -1,4 +1,3 @@
-import java.util.Queue
 import java.util.concurrent.BlockingQueue
 
 /**Performs operations on input data concurrently.
@@ -29,7 +28,7 @@ internal class ParallelProcess<In, Out> {
      * @param numberOfWorkerThreads the number of threads -- and the number of times to repeat -- running the workFunction
      * */
     @Throws(IllegalStateException::class)
-    fun repeatOnInput(input: In, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5) {
+    fun repeatOnInput(input: In, numberOfWorkerThreads: Int = 5, workFunction: (input: In) -> Out?) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
         outputInProgress = MutableList(numberOfWorkerThreads) {null}
@@ -67,7 +66,11 @@ internal class ParallelProcess<In, Out> {
      * @param waitTime the time to wait between checks for new elements when the queue is empty
      * */
     @Throws(IllegalStateException::class)
-    fun processMutableQueueWithWorkerPool(inputQueue: BlockingQueue<out In>, workFunction: (input: In) -> Out?, numberOfWorkerThreads: Int = 5, waitTime:Long=250) {
+    fun workerPoolOnMutableQueue(inputQueue: BlockingQueue<out In>,
+                                 workFunction: (input: In) -> Out?,
+                                 numberOfWorkerThreads: Int = 5,
+                                 waitTime:Long=250
+    ) {
         if(isRunning) throw IllegalStateException("this instance is already running an operation.\n" +
                 "Collect the data from this operation first, or use another instance.")
         outputInProgress = mutableListOf<Out?>()//the output list is an as-yet unknown size,

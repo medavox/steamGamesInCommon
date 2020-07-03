@@ -27,7 +27,7 @@ fun buildNameCache(key: String, vararg players: String) {
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
     val pp1 = ParallelProcess<String, String?>().finishWhenQueueIsEmpty()
-    pp1.processMutableQueueWithWorkerPool(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
+    pp1.workerPoolOnMutableQueue(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
         steamApi.getSteamId(vanityOrHash)
     }, NUM_THREADS)
     val playerIDs:List<String> = pp1.collectOutputWhenFinished().filterNotNull()
@@ -41,7 +41,7 @@ fun buildNameCache(key: String, vararg players: String) {
     println("getting list of owned games for each steam ID (profiles must be public):")
     println("-----------------------------------------------------------------------\n")
     val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
-    pp2.processMutableQueueWithWorkerPool(LinkedBlockingQueue(playerIDs), { playerId: String ->
+    pp2.workerPoolOnMutableQueue(LinkedBlockingQueue(playerIDs), { playerId: String ->
         Pair(playerId, steamApi.getGamesOwnedByPlayer(playerId))
     }, NUM_THREADS)
 
@@ -74,7 +74,7 @@ fun buildNameCache(key: String, vararg players: String) {
         val gameIdsToLookup = gameIds.filter { appid ->
             cachedNames[appid.toInt()] == null
         }
-        pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(gameIdsToLookup), { appid ->
+        pp1.reset().workerPoolOnMutableQueue(LinkedBlockingQueue(gameIdsToLookup), { appid ->
             val url = "https://store.steampowered.com/app/$appid"
             val request:Request = Request.Builder().url(url)
                 //don't compress the response, so we can just download the start of the document
@@ -127,7 +127,7 @@ fun buildNameCache(key: String, vararg players: String) {
 
         //STEP 4: Retry failed scrapes with the Web API
         println("retrying ${failedScrapes.size} failed store-page scrapes with the Steam Web API...")
-        pp1.reset().processMutableQueueWithWorkerPool(LinkedBlockingQueue(failedScrapes), { appid:String ->
+        pp1.reset().workerPoolOnMutableQueue(LinkedBlockingQueue(failedScrapes), { appid:String ->
             //despite the name 'appids', the store API no longer supports multiple appids, for some unknown reason:
             //https://www.reddit.com/r/Steam/comments/2kz2ay/steam_store_api_multiple_app_id_lists_no_longer/
             val url = "http://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/?key=$key&appid=$appid"
