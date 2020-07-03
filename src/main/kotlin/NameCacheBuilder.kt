@@ -21,31 +21,14 @@ fun buildNameCache(key: String, vararg players: String) {
     val NUM_THREADS = 8
     val client = OkHttpClient.Builder()/*.followRedirects(false)*/.callTimeout(30, TimeUnit.SECONDS).build()
     val json = Json(JsonConfiguration.Stable)
+    val steamApi = SteamApi(key, client, json)
     //STEP 1
     //=====================================
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
     val pp1 = ParallelProcess<String, String?>().finishWhenQueueIsEmpty()
     pp1.processMutableQueueWithWorkerPool(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
-        if(vanityOrHash.matches(Regex("\\d{17}"))) {//is already a SteamId
-            vanityOrHash
-        } else {
-            val url = "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$vanityOrHash"
-            if (debug) println(url)
-            val request:Request = Request.Builder()
-                    .url(url)
-                    .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseString = response.body?.string()
-
-                if (responseString == null) println("ERROR: got null response for ID $vanityOrHash")
-                responseString?.let {
-                    json.parseJson(responseString).jsonObject["response"]?.jsonObject?.get("steamid")?.toString()
-                        ?.trim { c -> c == '"' }
-                }
-            }
-        }
+        steamApi.getSteamId(vanityOrHash)
     }, NUM_THREADS)
     val playerIDs:List<String> = pp1.collectOutputWhenFinished().filterNotNull()
 
@@ -59,29 +42,7 @@ fun buildNameCache(key: String, vararg players: String) {
     println("-----------------------------------------------------------------------\n")
     val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
     pp2.processMutableQueueWithWorkerPool(LinkedBlockingQueue(playerIDs), { playerId: String ->
-        val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$playerId&format=json"
-        if (debug) println(url)
-        val request:Request = Request.Builder().url(url).build()
-        client.newCall(request).execute().use { response ->
-            val responseString = response.body?.string()
-
-            if (responseString == null) {
-                println("ERROR: got null response for game library request for ID $playerId")
-                //Pair(id, listOf<Pair<String, String>>())
-                null
-            } else {
-                val gamesJson: JsonObject? = json.parseJson(responseString).jsonObject["response"]?.jsonObject
-                val gameIdList = gamesJson?.get("games")?.jsonArray
-                val gameIds: List<String>? = gameIdList?.mapNotNull {
-                    val asObj = it.jsonObject
-                    asObj["appid"]?.primitive?.contentOrNull
-                }
-                if (gameIds?.isEmpty() != false) {
-                    println("got zero games for steam ID $playerId; is the profile public?")
-                }
-                Pair(playerId, gameIds)
-            }
-        }
+        Pair(playerId, steamApi.getGamesOwnedByPlayer(playerId))
     }, NUM_THREADS)
 
     val ownedGames:Map<String, List<String>?> = pp2.collectOutputWhenFinished().filterNotNull().toMap()
