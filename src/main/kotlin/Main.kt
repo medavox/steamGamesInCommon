@@ -3,10 +3,12 @@ import io.ktor.client.features.HttpTimeout
 import io.ktor.client.request.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import java.util.*
 
 /**Input: a list of steam vanityNames
  * (https://steamcommunity.com/id/THIS_IS_YOUR_VANITY_NAME)
@@ -204,4 +206,13 @@ suspend fun steamGamesInCommon(key:String, vararg players:String):Map<String, St
         }*/
     client.close()
     nameMappings
+}
+
+fun main(args:Array<String>) = runBlocking<Unit> {
+    if(args.size < 2) {
+        System.err.println("required arguments: <steam web API key> [player]...")
+    }
+    val names = Arrays.copyOfRange(args, 1, args.size)
+    //buildNameCache(args[0], *names)
+    steamGamesInCommon(args[0], *names)
 }
