@@ -19,7 +19,7 @@ import kotlinx.serialization.json.JsonObject
  *   3) a minimum percentage of the group has played before
  *   4) the average playtime is above a certain amount (total group playtime divided by number of players)
  *   5) at least one player has played before*/
-suspend fun steamGamesInCommon(key:String, vararg players:String) = coroutineScope {
+suspend fun steamGamesInCommon(key:String, vararg players:String):Map<String, String?> = coroutineScope<Map<String, String?>> {
     val client = HttpClient()
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
@@ -33,6 +33,9 @@ suspend fun steamGamesInCommon(key:String, vararg players:String) = coroutineSco
             )
         }
     }
+
+    //todo: also load the friends of the provided URLs,
+    //then allow the user to select from the list
 
     // Get the request contents without blocking threads, but wait until all requests are done.
     // Suspension point.
@@ -200,4 +203,5 @@ suspend fun steamGamesInCommon(key:String, vararg players:String) = coroutineSco
             }
         }*/
     client.close()
+    nameMappings
 }

@@ -1,4 +1,7 @@
 import io.ktor.http.Url
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.w3c.dom.*
 import org.w3c.dom.events.Event
 import org.w3c.dom.url.URLSearchParams
@@ -20,8 +23,24 @@ fun main() {
     val errorsTextArea = document.getElementById("errors_text") as HTMLTextAreaElement
     //val params:URLSearchParams = js("URLSearchParams.getAll()") as URLSearchParams
     val params = Url(document.URL).parameters
-    println("params:"+params.toString())
-    outputTextArea.textContent = params.toString()
+    val players:List<String>? = params.getAll("players")
+
+    val apiKey:String? = params["key"]//?.get(0)
+    if(apiKey != null && players != null) {
+        GlobalScope.launch {
+            outputTextArea.textContent = steamGamesInCommon(apiKey, *(players.toTypedArray())).entries.
+                map { it.value ?: it.key }.
+                fold("") { acc, elem ->
+                    "$acc\n$elem"
+                }
+        }
+    }else {
+        outputTextArea.textContent = "at least one was null:\n key: $apiKey ; players: $players"
+    }
+
+    //println("params:"+params.toString())
+    //outputTextArea.textContent = params.toString()
+
     inputTextArea.setAttribute("placeholder", UiStrings.inputHint)
     outputTextArea.setAttribute("placeholder", UiStrings.outputHint)
     errorsTextArea.setAttribute("placeholder", UiStrings.errorsHint)
