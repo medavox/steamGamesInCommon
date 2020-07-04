@@ -30,7 +30,7 @@ class SteamApi (
             }
         }
 
-    fun getGamesOwnedByPlayer(playerId:String):List<String>? {
+    fun getGamesOwnedByPlayer(playerId:String):List<String> {
         val url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$steamWebApiKey&steamid=$playerId&format=json"
         //if (debug) println(url)
         val request:Request = Request.Builder().url(url).build()
@@ -40,14 +40,14 @@ class SteamApi (
             if (responseString == null) {
                 println("ERROR: got null response for game library request for ID $playerId")
                 //Pair(id, listOf<Pair<String, String>>())
-                null
+                listOf()
             } else {
                 val gamesJson: JsonObject? = json.parseJson(responseString).jsonObject["response"]?.jsonObject
                 val gameIdList = gamesJson?.get("games")?.jsonArray
-                val gameIds: List<String>? = gameIdList?.mapNotNull {
+                val gameIds: List<String> = gameIdList?.mapNotNull {
                         it.jsonObject["appid"]?.primitive?.contentOrNull
-                }
-                if (gameIds?.isEmpty() != false) {
+                } ?: listOf()
+                if (gameIds.isEmpty()) {
                     println("got zero games for steam ID $playerId; is the profile public?")
                 }
                 gameIds
