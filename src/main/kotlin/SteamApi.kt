@@ -1,4 +1,5 @@
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonConfiguration
 import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
@@ -61,14 +62,38 @@ class SteamApi(
         val url = "http://api.steampowered.com/ISteamUser/GetFriendList/v0001/?key=$key&steamid=$playerId&format=json&relationship=friend"
         val request:Request = Request.Builder().url(url).build()
         return client.newCall(request).execute().use { response ->
-            println("response: $response; body:")
-            println("${response.body?.string()}")
-            listOf()
+            val responseString = response.body?.string()
+            if(responseString == null) {
+                println("ERROR: got a null response for friends of player: $playerId")
+                listOf<String>()
+            } else {
+                val playerSummaries: JsonArray? = json.parseJson(responseString).jsonObject["friendslist"]?.jsonObject?.get("friends")?.jsonArray
+                playerSummaries?.map { it.jsonObject["steamid"].toString() } ?: listOf<String>()
+            }
         }
     }
 
-    /**Gets the current nickname for this player, or null if the query failed somehow.*/
-    fun getNickForPlayerId(playerId:String):String? {
-
+    /**Gets the current nickname for each provided player, or an empty map null if the query failed for some reason.*/
+    fun getNicksForPlayerIds(vararg playerIds:String):Map<String, String> {
+        val url = playerIds.fold(
+                "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=$key&steamids="
+        ) { acc, elem ->
+            acc+(if(acc.last()=='=')"" else ",")+elem
+        }
+        val request:Request = Request.Builder().url(url).build()
+        return client.newCall(request).execute().use { response ->
+            val responseString = response.body?.string()
+            if(responseString == null) {
+                println("ERROR: got a null response for player summaries request for IDs $playerIds")
+                mapOf()
+            } else {
+                //{"response":{"players":[{
+                val playerSummaries: JsonArray? = json.parseJson(responseString).jsonObject["response"]?.jsonObject?.get("players")?.jsonArray
+                playerSummaries?.associate {
+                    val obj = it.jsonObject
+                    Pair<String, String>(obj["steamid"].toString(), obj["personaname"].toString())
+                } ?:mapOf()
+            }
+        }
     }
 }
