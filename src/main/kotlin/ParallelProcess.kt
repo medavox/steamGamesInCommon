@@ -20,7 +20,7 @@ internal class ParallelProcess<In, Out> {
     var threadsKillswitch:Boolean = false
 
     private val workerThreads:MutableSet<Thread> = mutableSetOf()
-    lateinit private var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
+    private lateinit var outputInProgress:MutableList<Out?>//nullable because worker threads may fail to produce output
     private var isRunning = false
     /**Run this instance's worker repeatedly concurrently with the same input.
      * @param input the input to run on
@@ -110,8 +110,6 @@ internal class ParallelProcess<In, Out> {
     fun collectOutputWhenFinished(): List<Out?> {
         for(thread in workerThreads) {
             thread.join()
-            //reset the workerThreads collection after we're done, to allow reuse of the same instance
-            //workerThreads.remove(thread)
         }
         isRunning = false
         //get rid of null elements, convert from MutableSet<Out?> to List<Out>
