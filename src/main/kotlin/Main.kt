@@ -1,14 +1,11 @@
-import io.ktor.client.HttpClient
-import io.ktor.client.features.HttpTimeout
-import io.ktor.client.request.get
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
+import okhttp3.OkHttpClient
 import java.util.*
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 /**Input: a list of steam vanityNames
  * (https://steamcommunity.com/id/THIS_IS_YOUR_VANITY_NAME)
@@ -21,68 +18,60 @@ import java.util.*
  *   3) a minimum percentage of the group has played before
  *   4) the average playtime is above a certain amount (total group playtime divided by number of players)
  *   5) at least one player has played before*/
-suspend fun steamGamesInCommon(key:String, vararg players:String):Map<String, String?> = coroutineScope<Map<String, String?>> {
-    val client = HttpClient()
+fun steamGamesInCommon(key:String, vararg players:String):Map<String, String?> {
+    val debug = false
+    val NUM_THREADS = 6
+    val client = OkHttpClient.Builder()/*.followRedirects(false)*/.callTimeout(30, TimeUnit.SECONDS).build()
+    val json = Json(JsonConfiguration.Stable)
+    val steamApi = SteamApi(key, client, json)
+
+    //STEP 1
+    //=====================================
     // request all player IDs asynchronously in parallel.
     //get 64-bit steam ID from 'vanityName' (mine is addham):
     //only accepts one vanity name at a time, so it might be worth caching...
     //can also use this to create a list of recent players, to reduce player effort after first use
-    val playerSchemas = players.map {
-        async {
-            println("http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it")
-            client.get<String>(
-                "http://api.steampowered.com/ISteamUser/ResolveVanityURL/v0001/?key=$key&vanityurl=$it"
-            )
-        }
-    }
+    val pp1 = ParallelProcess<String, String?>().finishWhenQueueIsEmpty()
+    pp1.workerPoolOnMutableQueue(LinkedBlockingQueue(players.toList()), { vanityOrHash ->
+        steamApi.getSteamId(vanityOrHash)
+    }, NUM_THREADS)
+    // Get the request contents without blocking threads, but wait until all requests are done.
+    val playerIDs:List<String> = pp1.collectOutputWhenFinished().filterNotNull()
 
     //todo: also load the friends of the provided URLs,
     //then allow the user to select from the list
 
-    // Get the request contents without blocking threads, but wait until all requests are done.
-    // Suspension point.
-    val json = Json(JsonConfiguration.Stable)
-    //.await() BOTH waits for the result to complete AND gets its result
-    val playerIDs: List<String> = playerSchemas.map {
-        //println(it.await())
-        json.parseJson(it.await()).jsonObject["response"]?.jsonObject
-    }.map { it?.get("steamid")?.toString()?.trim{ it == '"'} }.filterNotNull()
-
     players.forEachIndexed { i, s -> println("$s: ${playerIDs[i]}") }
 
-    //get list of owned games for provided list of 64-bit steam IDs (comma-seperated) (profiles must be public):
+    //STEP 2
+    //=====================================
+    //get list of owned games for each 64-bit steam ID (comma-separated) (profiles must be public):
     //http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=76561197979296883&format=json
-    //the Pair<String, String> is app id: play time forever
-    val ownedGames:Map<String, List<Pair<String, String>>?> = playerIDs.associate { id:String ->
-        val games = async {
-            client.get<String>(
-                    "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/?key=$key&steamid=$id&format=json"
-            )
-        }
-        val gamesJson:JsonObject? = json.parseJson(games.await()).jsonObject["response"]?.jsonObject
-        val gameIdList = gamesJson?.get("games")?.jsonArray
-        val idPlayTimePairs:List<Pair<String, String>>? = gameIdList?.map {
-            val asObj = it.jsonObject
-            val appid = asObj["appid"]?.primitive?.contentOrNull
-            val playtime = asObj["playtime_forever"]?.primitive?.contentOrNull
-            if(appid != null && playtime != null) Pair(appid, playtime) else null
-        }?.filterNotNull()
-        //println(gameIdList)
-        Pair(id, idPlayTimePairs)
-    }
+    //Pair<appid:String, playtime:String>
+    println("\n-----------------------------------------------------------------------")
+    println("getting list of owned games for each steam ID (profiles must be public):")
+    println("-----------------------------------------------------------------------\n")
+    val pp2 = ParallelProcess<String, Pair<String, List<String>?>>().finishWhenQueueIsEmpty()
+    pp2.workerPoolOnMutableQueue(LinkedBlockingQueue(playerIDs), { playerId: String ->
+        Pair(playerId, steamApi.getGamesOwnedByPlayer(playerId))
+    }, NUM_THREADS)
+
+    val ownedGames:Map<String, List<String>?> = pp2.collectOutputWhenFinished().filterNotNull().toMap()
+
 
     //work out which IDs are common to all given players
-    val withoutPlaytime: List<List<String>> = ownedGames.map {
-        it.value?.map { (appid, _) -> appid }
-    }.filterNotNull()
-    var commonToAll = withoutPlaytime[0].toSet()
-    for(i in 1 until withoutPlaytime.size) {
-        commonToAll = commonToAll.intersect(withoutPlaytime[i])
+    val justTheGames: List<List<String>> = ownedGames.values.filterNotNull()
+    var commonToAll = justTheGames[0].toSet()
+    for(i in 1 until justTheGames.size) {
+        commonToAll = commonToAll.intersect(justTheGames[i])
     }
 
     println("${commonToAll.size} games common to all")
-    //lookup names in cache
-    val nameMappings = commonToAll.associateWith { appid -> gameNameCache[appid.toInt()] }
+    //lookup names in Redis
+    val r = LocalRedisApi()
+    val nameMappings = commonToAll.associateWith { appid ->
+        r.getGameNameForAppId(appid.toInt())
+    }
     nameMappings.forEach { if(it.value == null ) println(it.key) else println(it.value) }
 
     //todo: defer id-to-name lookups until the last step,
@@ -204,15 +193,14 @@ suspend fun steamGamesInCommon(key:String, vararg players:String):Map<String, St
                 }
             }
         }*/
-    client.close()
-    nameMappings
+    return nameMappings
 }
 
 fun main(args:Array<String>) = runBlocking<Unit> {
-    if(args.size < 2) {
+    if (args.size < 2) {
         System.err.println("required arguments: <steam web API key> [player]...")
     }
-    val names = Arrays.copyOfRange(args, 1, args.size)
+    val names = args.copyOfRange(1, args.size)
     //buildNameCache(args[0], *names)
     steamGamesInCommon(args[0], *names)
 }
