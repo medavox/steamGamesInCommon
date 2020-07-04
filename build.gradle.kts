@@ -27,6 +27,7 @@ dependencies {
     implementation("io.ktor:ktor-client-apache:$ktor_version")
     implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version")
     implementation ("net.dv8tion:JDA:4.2.0_168")
+    implementation ("redis.clients:jedis:3.2.0")
     //a logging library is strongly recommended by JDA
     implementation ("org.apache.logging.log4j:log4j-api:2.13.3")
     implementation ("org.apache.logging.log4j:log4j-core:2.13.3")
