@@ -1,5 +1,5 @@
 fun main() {
-    val r = LocalRedisApi()
-    r.convertKotlinMap(gameNameCache)
-    r.convertJsonAppList("appList.json")
+    val r = RedisApi()
+    r.bulkReadKotlinMap(gameNameCache)
+    r.bulkReadJsonAppList("appList.json")
 }

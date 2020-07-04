@@ -5,7 +5,7 @@ import redis.clients.jedis.params.SetParams
 import java.io.File
 import java.lang.NullPointerException
 
-class LocalRedisApi : AutoCloseable {
+class RedisApi : AutoCloseable {
     companion object {
         val APP_ID_KEY_PREFIX = "appid:"
     }
@@ -18,17 +18,17 @@ class LocalRedisApi : AutoCloseable {
         if(jedis.exists("$APP_ID_KEY_PREFIX$appid") ) jedis.get("$APP_ID_KEY_PREFIX$appid") else null
     }
 
-    fun convertKotlinMap(map:Map<Int, String>) {
+    fun bulkReadKotlinMap(map:Map<Int, String>) {
         pool.resource.use { jedis ->
             //initialise cache from local file
             for (entry in map.entries) {
-                val result = jedis.set(entry.key.toString(), entry.value, SetParams().nx())
+                val result = jedis.set(APP_ID_KEY_PREFIX+entry.key.toString(), entry.value, SetParams().nx())
                 if (result != "OK") println("$result for ${entry.key} to ${entry.value}")
             }
         }
     }
 
-    fun convertJsonAppList(input:String) {
+    fun bulkReadJsonAppList(input:String) {
         val jsonParser = Json(JsonConfiguration.Stable)
         val jsonFile = File(input)
         if (!jsonFile.exists() || jsonFile.length() == 0L) {
@@ -50,7 +50,7 @@ class LocalRedisApi : AutoCloseable {
             //now it's all loaded in, write it out to Redis
             for (entry: JsonElement in gamesArray) {
                 val obj = entry.jsonObject
-                val key = obj["appid"]
+                val key = APP_ID_KEY_PREFIX+obj["appid"]
                 val value = Parser.unescapeEntities(obj["name"]?.content, false)
                 val result = jedis.set(key.toString(), value, SetParams().nx())
                 if (result != "OK") println("$result for $key to $value")

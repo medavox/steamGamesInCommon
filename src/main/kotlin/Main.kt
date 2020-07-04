@@ -1,9 +1,7 @@
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
 import okhttp3.OkHttpClient
-import java.util.*
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
@@ -68,7 +66,7 @@ fun steamGamesInCommon(key:String, vararg players:String):Map<String, String?> {
 
     println("${commonToAll.size} games common to all")
     //lookup names in Redis
-    val r = LocalRedisApi()
+    val r = RedisApi()
     val nameMappings = commonToAll.associateWith { appid ->
         r.getGameNameForAppId(appid.toInt())
     }
