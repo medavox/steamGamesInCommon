@@ -16,16 +16,11 @@ repositories {
     mavenCentral()
     jcenter()
 }
-val ktor_version = "1.3.2"
-val serialization_version = "0.20.0"
-val coroutines_version = "1.3.7"
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
     implementation("com.squareup.okhttp3:okhttp:4.7.2")
     implementation("org.jsoup:jsoup:1.13.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutines_version")
-    implementation("io.ktor:ktor-client-apache:$ktor_version")
-    implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:$serialization_version")
+    implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.20.0")
     implementation ("net.dv8tion:JDA:4.2.0_168")
     implementation ("redis.clients:jedis:3.2.0")
     //a logging library is strongly recommended by JDA
