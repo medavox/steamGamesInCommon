@@ -5,14 +5,31 @@ import redis.clients.jedis.params.SetParams
 import java.io.File
 import java.lang.NullPointerException
 
+/**redis keys for steamGamesInCommon
+
+appid to human game name mappings
+VanityId to steamId mappings
+(expiring) steamID to list of owned games - expire after 15 minutes
+ */
 class RedisApi : AutoCloseable {
     companion object {
         val APP_ID_KEY_PREFIX = "appid:"
+        val VANITY_ID_KEY_PREFIX = "steamIdFor:"
+        val OWNED_GAMES_KEY_PREFIX = "gamesOwnedBy:"
+        val NICKNAME_KEY_PREFIX = "nicknameOf:"
+
+        /**The amount of time that the list of games a player owns will be cached for*/
+        val GAMES_LIST_CACHE_EXPIRY_TIME_SECONDS = 900//15 minutes
     }
 
     override fun close() = pool.close() // when closing your application
 
     val pool:JedisPool = JedisPool("localhost", 1989)
+
+    /**@return false if the dat wasn't added because the key already exists*/
+    fun setGameNameForAppId(appid:Int, gameName:String):Boolean {
+
+    }
 
     fun getGameNameForAppId(appid:Int):String? = pool.resource.use { jedis ->
         if(jedis.exists("$APP_ID_KEY_PREFIX$appid") ) jedis.get("$APP_ID_KEY_PREFIX$appid") else null
@@ -57,4 +74,29 @@ class RedisApi : AutoCloseable {
             }
         }
     }
+
+    fun setGamesForPlayer(playerId:String, vararg gameAppids:String) {
+        pool.resource.use { jedis ->
+            jedis.sadd(OWNED_GAMES_KEY_PREFIX+playerId, *gameAppids)
+            jedis.expire(OWNED_GAMES_KEY_PREFIX+playerId, GAMES_LIST_CACHE_EXPIRY_TIME_SECONDS)
+        }
+    }
+    /**returns a list of appids for the given player, or null if no data is found*/
+    fun getGamesForPlayer(playerId:String):List<String>? {
+
+    }
+
+    /**Returns the current nickname for the player, or null if no data was found
+     * eg for player with vanityId "addham", the function would return "Mr. Gherkin"*/
+    fun getNickForPlayer(playerId:String):String? {
+
+    }
+
+    /**@return false if the dat wasn't added because the key already exists*/
+    fun setNickForPlayer(playerId:String, nick:String):Boolean {
+
+    }
+
+    //we don't need to cache the friends for a given player (at least not yet),
+    //since we're only querying them as an easy way to get more steamIDs without the app user manually specifying them
 }
