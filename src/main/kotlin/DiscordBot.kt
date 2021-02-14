@@ -63,56 +63,52 @@ class DiscordBot(private val selfUser:SelfUser) : ListenerAdapter() {
             handleCommand(event.message, event.channel)
         }
     }
+
+    private fun sgicCommand(arguments:Array<String>):String {
+        if(arguments.size < 2) {
+            return "please specify at least 2 steam IDs."
+        }
+        return try {
+            val playerIDs = backend.sanitiseInputIds(*arguments)
+            if(playerIDs.isNotEmpty()) backend.steamGamesInCommon(playerIDs)
+            "```\n${output.toString()}\n```"
+        } catch(e:MultiException) {
+            output.clear()
+            e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
+            output.toString()
+        }
+    }
+
+    private fun friendsOfCommand(arguments:Array<String>):String {
+        if(arguments.isEmpty()) {
+            return "please specify at least 1 steam ID."
+        }
+        return try {
+            val playerIDs = backend.sanitiseInputIds(*arguments)
+            if(playerIDs.isNotEmpty()) backend.friendsOf(playerIDs)
+            output.toString()
+        } catch(e:MultiException) {
+            output.clear()
+            e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
+            output.toString()
+        }
+    }
+
     private fun handleCommand(msg:Message, channel:MessageChannel) {
         output.clear()
 
         try {
-            if (msg.contentRaw.startsWith("!sgic ")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val arguments = argumentsFromCommand(msg.contentRaw)
-                if(arguments.size < 2) {
-                    channel.sendMessage("please specify at least 2 steam IDs.").queue()
-                    return
-                }
-                val results:String = try {
-                    val playerIDs = backend.sanitiseInputIds(*arguments)
-                    if(playerIDs.isNotEmpty()) backend.steamGamesInCommon(playerIDs)
-                    output.toString()
-                } catch(e:MultiException) {
-                    output.clear()
-                    e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
-                    output.toString()
-                }
-                for (submessage in splitLongMessage(results)) {
-                    channel.sendMessage(submessage).queue()
-                }
-            } else if (msg.contentRaw.startsWith("!friendsof ")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val arguments = argumentsFromCommand(msg.contentRaw)
-                if(arguments.isEmpty()) {
-                    channel.sendMessage("please specify at least 1 steam ID.").queue()
-                    return
-                }
-                val results:String = try {
-                    val playerIDs = backend.sanitiseInputIds(*arguments)
-                    if(playerIDs.isNotEmpty()) backend.friendsOf(playerIDs)
-                    output.toString()
-                } catch(e:MultiException) {
-                    output.clear()
-                    e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
-                    output.toString()
-                }
-                for (submessage in splitLongMessage(results, DISCORD_MAX_MESSAGE_LENGTH-10)) {
-                    println("message length: "+submessage.length)
-                    channel.sendMessage("```\n$submessage\n```").queue()
-                }
-            } else if (msg.contentRaw.contains("!help")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val s = splitLongMessage(helpText)
-                println("help text message chunks: "+s.size)
-                channel.sendMessage(helpText).queue()
-            } else {
-                channel.sendMessage("command not recognised. Try `!sgic`, `!friendsof` or `!help`").queue()
+            val funToRun:(Array<String>) -> String = with(msg.contentRaw) { when {
+                startsWith("!sgic ") -> ::sgicCommand
+                startsWith("!friendsof ") -> ::friendsOfCommand
+                contains("!help") -> { _ -> helpText }
+                else -> { _ -> "command not recognised. Try `!sgic`, `!friendsof` or `!help`"}
+            }}
+            msg.addReaction("\uD83E\uDD16").queue()
+            val results = funToRun(argumentsFromCommand(msg.contentRaw))
+
+            for (submessage in splitLongMessage(results)) {
+                channel.sendMessage(submessage).queue()
             }
         } catch(owt:Throwable) {
             channel.sendMessage("Woops! something went wrong at my end (tech jargon:||${owt.javaClass.name}||). Try again?").queue()
@@ -122,8 +118,6 @@ class DiscordBot(private val selfUser:SelfUser) : ListenerAdapter() {
 }
 private val helpText = """Find games everyone can play!
 
-In public channels, I only respond to !help.
-The main commands only work when you you DM me, for extra privacy.
 NOTE: the steam profile of every user must be public!
 
 Commands:
