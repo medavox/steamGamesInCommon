@@ -52,25 +52,13 @@ class DiscordBot(private val selfUser:SelfUser) : ListenerAdapter() {
             toTypedArray()
     }
 
-    /**DMs anyone who posts a public message '!help' somewhere we can get it*/
-    override fun onMessageReceived(event: MessageReceivedEvent) {
-        super.onMessageReceived(event)
-        if(event.channel.type != ChannelType.PRIVATE) {
-            if (event.message.contentRaw == "!help") {
-                event.message.author.openPrivateChannel().queue { privChan ->
-                    privChan.sendMessage(helpText).queue()
-                }
-            }
-        }
-    }
-
     override fun onPrivateMessageUpdate(event: PrivateMessageUpdateEvent) {
         if(event.message.author != selfUser) {//ignore our own messages
             handleCommand(event.message, event.channel)
         }
     }
 
-    override fun onPrivateMessageReceived(event: PrivateMessageReceivedEvent) {
+    override fun onMessageReceived(event: MessageReceivedEvent) {
         if(event.message.author != selfUser) {//ignore our own messages
             handleCommand(event.message, event.channel)
         }
