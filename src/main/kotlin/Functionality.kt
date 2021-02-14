@@ -4,13 +4,11 @@ import api.SteamApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
 import okhttp3.OkHttpClient
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 internal class Functionality(steamKey:String, private val traceln: (msg:CharSequence) -> Unit) {
 
     val debug = false
-    val NUM_THREADS = 6
     val client = OkHttpClient.Builder()/*.followRedirects(false)*/.callTimeout(30, TimeUnit.SECONDS).build()
     val json = Json(JsonConfiguration.Stable)
     val steamApi = SteamApi(steamKey, client, json)
@@ -20,7 +18,8 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
     fun sanitiseInputIds(vararg players: String):List<String> {
         //STEP 1
         //=====================================
-        // request all player IDs asynchronously in parallel.
+        // request all player IDs synchronously NO LONGER in parallel.
+        //this is now all done on one thread (which is slower), but also helps to rate-limit bot usage
         //can also use this to create a list of recent players, to reduce player effort after first use
         val possibleExceptions = mutableSetOf<Throwable>()
         val playerIDs:Map<String, String?> = players.toList().associateWith { vanityOrHash ->
