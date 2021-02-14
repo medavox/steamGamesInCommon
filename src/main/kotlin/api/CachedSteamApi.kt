@@ -89,6 +89,8 @@ class CachedSteamApi(private val redisApi: RedisApi, private val steamApi: Steam
     fun guaranteeSteamId(convertableToSteamId:String):String? {
         return if (convertableToSteamId.matches(Regex("\\d{17}"))) {//is already a SteamId
             convertableToSteamId
+        } else if(convertableToSteamId.matches(Regex("\\d{10}"))) {//is missing the standard prefix; add it
+            "7656119"+convertableToSteamId
         } else getSteamIdForVanityName(convertableToSteamId)
     }
 }

@@ -149,9 +149,14 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
             friendos?.let{friends.addAll(friendos)}
         }
         playerNicknames += cachedSteamApi.getNicksForPlayerIds(*(friends.toTypedArray()))
-        traceln("Friends of ${results.keys.map { playerNicknames[it] ?: it }.toString().trim { it == '[' || it == ']' }}:")
+        traceln("Friends of ${results.keys.map { playerNicknames[it] ?: it }.toString().trim { it == '[' || it == ']' }} (all IDs are preceded by 7656119):")
         friends.forEach { friendSteamId ->
-            traceln(friendSteamId.trim { it == '"' } + " = " + (playerNicknames[friendSteamId] ?: "<unknown>"))
+            val trimd = friendSteamId.trim { it == '"' }
+            val id = if(trimd.startsWith("7656119")) trimd.substring(7) else {
+                println("steam ID $trimd doesn't start with the usual prefix!!")
+                trimd
+            }
+            traceln( id + " = " + (playerNicknames[friendSteamId] ?: "<unknown>"))
         }
     }
 }
