@@ -129,7 +129,6 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
         //val playerNicknames: Map<String, String?> = playerIDs.associateWith { cachedSteamApi.getNickForPlayer(it) }
         val playerNicknames: MutableMap<String, String?> = cachedSteamApi.getNicksForPlayerIds(*(playerIDs.toTypedArray())).toMutableMap()
 
-        val friends = mutableSetOf<String>()
         val possibleExceptions = mutableSetOf<Throwable>()
         val results = playerIDs.associateWith { playerId: String ->
             val playersFriends = cachedSteamApi.getFriendsOfPlayer(playerId)
@@ -145,6 +144,7 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
         }
         if(results.isEmpty()) return
 
+        val friends = mutableSetOf<String>()
         for (friendos:Set<String>? in results.values) {
             friendos?.let{friends.addAll(friendos)}
         }
