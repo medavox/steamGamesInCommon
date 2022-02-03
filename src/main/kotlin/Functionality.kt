@@ -28,7 +28,7 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
                 if(guaranteed == null) {
                     possibleExceptions.add(ProfileNotFoundException(vanityOrHash))
                     null
-                }else guaranteed
+                } else guaranteed
         }
 
         if(playerIDs.values.any { it == null } || possibleExceptions.isNotEmpty()) {
@@ -66,7 +66,7 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
         println("getting list of owned games for each steam ID (profiles must be public):")
         println("-----------------------------------------------------------------------\n")
         val possibleExceptions = mutableSetOf<Throwable>()
-        val ownedGames: Map<String, Set<String>?> =playerIDs.associateWith { playerId: String ->
+        val ownedGames: Map<String, Set<String>?> = playerIDs.associateWith { playerId: String ->
             val games = cachedSteamApi.getGamesForPlayer(playerId)
             if (games == null) {
                 possibleExceptions.add(SteamApiException())

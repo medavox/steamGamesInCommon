@@ -132,6 +132,7 @@ class SteamApi(
             getNicksForPlayerIdsNotLimitedTo100(steamids.toList())
         }
     }
+
     /**Even though the Steam API limits player id requests to 100 in a  single query, this method does not limit itself.
      * The above method does that.
      * @see getNicksForPlayerIds*/

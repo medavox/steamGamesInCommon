@@ -24,8 +24,8 @@ class RedisApi : AutoCloseable {
         val PLAYTIME_STATS_PER_PLAYER_KEY_PREFIX = "playtimeForPlayer&Game:"
 
         /**The amount of time that the list of games a player owns will be cached for*/
-        val SHORT_EXPIRY_TIME_SECONDS = 900//15 minutes
-        val LONG_EXPIRY_TIME_SECONDS = 86400*3//3 days
+        val SHORT_EXPIRY_TIME_SECONDS = 900L//15 minutes
+        val LONG_EXPIRY_TIME_SECONDS = 86400L*3L//3 days
     }
 
     override fun close() = pool.close() // when closing your application

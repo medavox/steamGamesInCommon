@@ -1,11 +1,11 @@
 plugins {
+    kotlin("jvm") version "1.6.10"
     java
-    kotlin("jvm") version "1.3.72"
-    kotlin("plugin.serialization") version "1.3.72"
+    kotlin("plugin.serialization") version "1.6.10"
     id ("maven-publish")
-    id ("org.jetbrains.dokka") version "0.10.1"
-    id("com.github.johnrengelman.shadow") version "5.2.0"
-    id("com.github.ben-manes.versions") version "0.28.0"
+    id ("org.jetbrains.dokka") version "1.6.10"
+    id("com.github.johnrengelman.shadow") version "7.1.2"
+    id("com.github.ben-manes.versions") version "0.41.0"
 }
 
 group = "org.example"
@@ -13,18 +13,18 @@ version = "1.0-SNAPSHOT"
 
 repositories {
     mavenCentral()
-    jcenter()
+    maven("https://m2.dv8tion.net/releases")
 }
 dependencies {
     implementation(kotlin("stdlib-jdk8"))
-    implementation("com.squareup.okhttp3:okhttp:4.7.2")
-    implementation("org.jsoup:jsoup:1.13.1")
+    implementation("com.squareup.okhttp3:okhttp:4.9.3")
+    implementation("org.jsoup:jsoup:1.14.3")
     implementation ("org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.20.0")
-    implementation ("net.dv8tion:JDA:4.2.0_227")
-    implementation ("redis.clients:jedis:3.2.0")
+    implementation ("net.dv8tion:JDA:4.4.0_352")
+    implementation ("redis.clients:jedis:4.1.0")
     //a logging library is strongly recommended by JDA
-    implementation ("org.apache.logging.log4j:log4j-api:2.13.3")
-    implementation ("org.apache.logging.log4j:log4j-core:2.13.3")
+    implementation ("org.apache.logging.log4j:log4j-api:2.17.1")
+    implementation ("org.apache.logging.log4j:log4j-core:2.17.1")
 }
 
 java {
