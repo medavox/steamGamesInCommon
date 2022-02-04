@@ -150,8 +150,9 @@ internal class Functionality(steamKey:String, private val traceln: (msg:CharSequ
         }
         playerNicknames += cachedSteamApi.getNicksForPlayerIds(*(friends.toTypedArray()))
         traceln("Friends of ${results.keys.map { playerNicknames[it] ?: it }.toString().trim { it == '[' || it == ']' }}:")
-        friends.forEach { friendSteamId ->
-            traceln(friendSteamId.trim { it == '"' } + " = " + (playerNicknames[friendSteamId] ?: "<unknown>"))
+        friends.map { Pair(it, playerNicknames[it] ?: "<unknown>") }.sortedBy { it.second }
+            .forEach { (id, nick) ->
+            traceln("$id - $nick")
         }
     }
 }
