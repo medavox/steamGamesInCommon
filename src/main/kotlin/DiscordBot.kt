@@ -1,6 +1,7 @@
 import net.dv8tion.jda.api.JDABuilder
 import net.dv8tion.jda.api.entities.*
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent
+import net.dv8tion.jda.api.events.message.MessageUpdateEvent
 import net.dv8tion.jda.api.events.message.priv.PrivateMessageReceivedEvent
 import net.dv8tion.jda.api.events.message.priv.PrivateMessageUpdateEvent
 import net.dv8tion.jda.api.hooks.ListenerAdapter
@@ -45,86 +46,83 @@ class DiscordBot(private val selfUser:SelfUser) : ListenerAdapter() {
     }
 
     private fun argumentsFromCommand(command:String):Array<String> {
-        return command.split(" ").
+        //the example user-id-snowflake in the discord documentation is 17 digits long;
+        //sgic's own is 19 digits
+        //so this is hopefully inclusive enough
+        val mentionsPattern = Regex("<@!?\\d{10,}>")
+        val r = command.
+            //strip out all mentions
+            replace(mentionsPattern, "").
+            trim(' ').
+            split(" ").
             let { it.subList(1, it.size) }.
             map { arg -> arg.trim()}.
             filter { it.isNotBlank() && it.isNotEmpty() }.
             toTypedArray()
+
+        println("args: ${r.toList()}")
+        return r
     }
 
-    /**DMs anyone who posts a public message '!help' somewhere we can get it*/
+    override fun onMessageUpdate(event: MessageUpdateEvent) {
+        //ignore our own messages, and only respond when directly pinged/atted/mentioned
+        if(event.message.author != selfUser && selfUser in event.message.mentionedUsers) {
+            handleCommand(event.message, event.channel)
+        }
+    }
+
     override fun onMessageReceived(event: MessageReceivedEvent) {
-        super.onMessageReceived(event)
-        if(event.channel.type != ChannelType.PRIVATE) {
-            if (event.message.contentRaw == "!help") {
-                event.message.author.openPrivateChannel().queue { privChan ->
-                    privChan.sendMessage(helpText).queue()
-                }
-            }
-        }
-    }
-
-    override fun onPrivateMessageUpdate(event: PrivateMessageUpdateEvent) {
-        if(event.message.author != selfUser) {//ignore our own messages
+        //ignore our own messages, and only respond when directly pinged/atted/mentioned
+        if(event.message.author != selfUser && selfUser in event.message.mentionedUsers) {
             handleCommand(event.message, event.channel)
         }
     }
 
-    override fun onPrivateMessageReceived(event: PrivateMessageReceivedEvent) {
-        if(event.message.author != selfUser) {//ignore our own messages
-            handleCommand(event.message, event.channel)
+    private fun sgicCommand(arguments:Array<String>):String {
+        if(arguments.size < 2) {
+            return "please specify at least 2 steam IDs."
+        }
+        return try {
+            val playerIDs = backend.sanitiseInputIds(*arguments)
+            if(playerIDs.isNotEmpty()) backend.steamGamesInCommon(playerIDs)
+            output.toString()
+        } catch(e:MultiException) {
+            output.clear()
+            e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
+            output.toString()
         }
     }
+
+    private fun friendsOfCommand(arguments:Array<String>):String {
+        if(arguments.isEmpty()) {
+            return "please specify at least 1 steam ID."
+        }
+        return try {
+            val playerIDs = backend.sanitiseInputIds(*arguments)
+            if(playerIDs.isNotEmpty()) backend.friendsOf(playerIDs)
+            "```\n${output.toString()}\n```"
+        } catch(e:MultiException) {
+            output.clear()
+            e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
+            output.toString()
+        }
+    }
+
     private fun handleCommand(msg:Message, channel:MessageChannel) {
         output.clear()
-
+        //println("raw message: ${msg.contentRaw}")
         try {
-            if (msg.contentRaw.startsWith("!sgic ")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val arguments = argumentsFromCommand(msg.contentRaw)
-                if(arguments.size < 2) {
-                    channel.sendMessage("please specify at least 2 steam IDs.").queue()
-                    return
-                }
-                val results:String = try {
-                    val playerIDs = backend.sanitiseInputIds(*arguments)
-                    if(playerIDs.isNotEmpty()) backend.steamGamesInCommon(playerIDs)
-                    output.toString()
-                } catch(e:MultiException) {
-                    output.clear()
-                    e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
-                    output.toString()
-                }
-                for (submessage in splitLongMessage(results)) {
-                    channel.sendMessage(submessage).queue()
-                }
-            } else if (msg.contentRaw.startsWith("!friendsof ")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val arguments = argumentsFromCommand(msg.contentRaw)
-                if(arguments.isEmpty()) {
-                    channel.sendMessage("please specify at least 1 steam ID.").queue()
-                    return
-                }
-                val results:String = try {
-                    val playerIDs = backend.sanitiseInputIds(*arguments)
-                    if(playerIDs.isNotEmpty()) backend.friendsOf(playerIDs)
-                    output.toString()
-                } catch(e:MultiException) {
-                    output.clear()
-                    e.exceptions.mapNotNull {it.message}.forEach { output.appendln("ERROR: $it") }
-                    output.toString()
-                }
-                for (submessage in splitLongMessage(results, DISCORD_MAX_MESSAGE_LENGTH-10)) {
-                    println("message length: "+submessage.length)
-                    channel.sendMessage("```\n$submessage\n```").queue()
-                }
-            } else if (msg.contentRaw.contains("!help")) {
-                msg.addReaction("\uD83E\uDD16").queue()
-                val s = splitLongMessage(helpText)
-                println("help text message chunks: "+s.size)
-                channel.sendMessage(helpText).queue()
-            } else {
-                channel.sendMessage("command not recognised. Try `!sgic`, `!friendsof` or `!help`").queue()
+            val funToRun:(Array<String>) -> String = with(msg.contentRaw.toLowerCase()) { when {
+                contains("sgic ") -> ::sgicCommand
+                contains("friends ") -> ::friendsOfCommand
+                contains("help") -> { _ -> helpText }
+                else -> { _ -> "command not recognised. Try `sgic`, `friends` or `help`"}
+            }}
+            msg.addReaction("\uD83E\uDD16").queue()
+            val results = funToRun(argumentsFromCommand(msg.contentRaw))
+
+            for (submessage in splitLongMessage(results)) {
+                channel.sendMessage(submessage).queue()
             }
         } catch(owt:Throwable) {
             channel.sendMessage("Woops! something went wrong at my end (tech jargon:||${owt.javaClass.name}||). Try again?").queue()
@@ -134,25 +132,23 @@ class DiscordBot(private val selfUser:SelfUser) : ListenerAdapter() {
 }
 private val helpText = """Find games everyone can play!
 
-In public channels, I only respond to !help.
-The main commands only work when you you DM me, for extra privacy.
 NOTE: the steam profile of every user must be public!
 
 Commands:
 
-!sgic <ID> <ID>...
+`sgic` <ID> <ID>...
     (Steam Games In Common)
-    ID can be a steam ID (eg 76561197962146232) or a 'vanity name' (eg AbacusAvenger).
+    ID can be a steam ID (eg [7656119]7962146232) or a 'vanity name' (eg AbacusAvenger).
     Lists games which all the specified users own. 
     When more than 2 users are specified, also lists games that only one player doesn't own.
 
     example: !sgic 
 
-!friendsof <ID> <ID>...
+`friends` <ID> <ID>...
     lists the steam friends of all the specified users.
-    Aan easier method to get steam IDs for the main !sgic command.
+    Use this to get steam IDs for the main `sgic` command.
 
-!help (also works in public channels)
+`help` (also works in public channels)
 displays this text
 
 If you can program (or are curious), the source code for this bot is at https://github.com/medavox/steamGamesInCommon
@@ -160,7 +156,7 @@ If you can program (or are curious), the source code for this bot is at https://
 
 fun main() {
     val jda = JDABuilder.createLight(discordToken, GatewayIntent.GUILD_MESSAGES, GatewayIntent.DIRECT_MESSAGES)
-        .setActivity(Activity.listening("!help"))
+        .setActivity(Activity.listening("@sgic help"))
         .build()
     jda.awaitReady()
     jda.addEventListener(DiscordBot(jda.selfUser))
